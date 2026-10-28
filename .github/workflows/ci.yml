@@ -81,6 +81,7 @@ jobs:
           for d in dist/lmconn-*; do
             name=$(basename "$d")
             bin="$d/$name"; [ -f "$d/$name.exe" ] && bin="$d/$name.exe"
+            chmod +x "$bin" # artifact download strips the exec bit
             tar -C "$d" -czf "release/${name}.tar.gz" "$(basename "$bin")"
           done
           (cd dist && sha256sum lmconn-*/* > ../release/SHA256SUMS.txt)
