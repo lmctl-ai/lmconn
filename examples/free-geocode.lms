@@ -1,0 +1,76 @@
+# Chapter: lmconnectors - Geocoding with OpenStreetMap Nominatim
+# Shows: URL encoding, descriptive User-Agent, HTTP retry, and up to three hits; system(argv) and the lmconn JSON envelope
+# Run: lmscript examples/free-geocode.lms [city]
+# Needs: lmconn on PATH; node on PATH for URL encoding; internet access; no credentials
+# exit: 0
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# This lmscript version has no URL encoder. Node receives data as argv, never shell text.
+fn url_encode(value) {
+  if (which("node") == null) {
+    println("ERROR: node is required to URL-encode parameters");
+    exit(1);
+  }
+  r = system(["node", "-e", "process.stdout.write(encodeURIComponent(process.argv[1]))", "--", value], 5000);
+  if (r.timed_out || r.code != 0) {
+    println("ERROR: URL encoding failed");
+    exit(1);
+  }
+  return r.stdout;
+}
+
+# HTTP errors still have env.ok=true: inspect result.status before bodyJson.
+fn fetch_json(argv) {
+  for (attempt in [0, 1]) {
+    r = system(argv, 45000);
+    if (r.timed_out) {
+      println("lmconn timed out");
+      exit(1);
+    }
+    if (trim(r.stdout) == "") {
+      println("lmconn returned no envelope (exit " + str(r.code) + ")");
+      exit(1);
+    }
+    env = json_parse(r.stdout);
+    if (!env.ok) {
+      if (attempt == 0 && (env.error.code == "NETWORK" || env.error.code == "TIMEOUT")) {
+        println("Transient " + env.error.code + "; retrying once in 3 seconds");
+        sleep_ms(3000);
+        continue;
+      }
+      println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+      exit(1);
+    }
+    res = env.result;
+    if (attempt == 0 && (res.status == 429 || (res.status >= 500 && res.status < 600))) {
+      println("HTTP " + str(res.status) + "; retrying once in 3 seconds");
+      sleep_ms(3000);
+      continue;
+    }
+    if (!res.ok) {
+      println("API failed: HTTP " + str(res.status));
+      exit(1);
+    }
+    if (!res.has("bodyJson") || res.bodyJson == null) {
+      println("API returned no JSON body (HTTP " + str(res.status) + ")");
+      exit(1);
+    }
+    return res.bodyJson;
+  }
+}
+
+city = ARGV.get(0, "Helsinki");
+url = "https://nominatim.openstreetmap.org/search?q=" + url_encode(city) + "&format=json&limit=3";
+# Public Nominatim: run manually, do not bulk-geocode or exceed one request/second.
+hits = fetch_json(["lmconn", "http", "request", url, "--header", "User-Agent: lmconnectors-example/0.1 (https://github.com/lmctl-ai/lmconnectors)", "--timeout", "40000"]);
+println("Geocoding " + city + " (© OpenStreetMap contributors, ODbL)");
+if (hits.len() == 0) {
+  println("No matches found");
+}
+for (hit in slice(hits, 0, 3)) {
+  println(hit.display_name + " | lat: " + hit.lat + ", lon: " + hit.lon);
+}
