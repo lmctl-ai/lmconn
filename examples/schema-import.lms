@@ -1,0 +1,41 @@
+# Chapter: lmconnectors - lmconn as a schema module
+# Shows: import of the generated cli.schema.v1 document; each operation becomes lmconn.<area>_<sub>(...)
+#        with positional params first and the rest in one options map; calls return
+#        {status:"ok", result} | {status:"error", error:{code, message}} | {status:"simulated"} and never throw.
+#        The result map is lmconn's envelope: r.result.ok and r.result.result (or r.result.error).
+# Run: lmscript examples/schema-import.lms [org]        (lmconn on PATH: `npm link` in the repo)
+#      lmscript --check examples/schema-import.lms      needs neither lmconn nor network
+#      lmscript --dry-run examples/schema-import.lms    prints "simulated", spawns nothing
+# Needs: lmscript >= 0.2.38 (local schema-file imports); lmconn on PATH for a real run; network for GitHub
+#        (anonymous works, rate limited; a token from `lmconn cred set github api_key`, GITHUB_TOKEN or gh is used
+#        when present). Without lmconn the call reports a launch error and the script prints SKIPPED (exit 0).
+# exit: 0
+import "../schema/lmconn.cli.schema.v1.json";
+
+org = ARGV.get(0, "lmctl-ai");
+
+# A read operation: github_repos(org, {limit}) -> lmconn github repos <org> --limit N
+r = lmconn.github_repos(org, {limit: 5});
+if (r.status == "simulated") {
+  println("simulated: " + r.simulated);
+} else if (r.status == "error" && r.error.code == "launch") {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+} else if (r.status == "error") {
+  # exit: lmconn exited non-zero; its own envelope is on stderr_tail only when it printed one there,
+  # so re-run `lmconn github repos ORG` by hand to see {ok:false, error:{code, message}}.
+  println("call failed: " + r.error.code + ": " + r.error.message);
+  exit(1);
+} else {
+  env = r.result;                          # lmconn's envelope, parsed
+  if (!env.ok) {
+    println("lmconn error: " + env.error.code + ": " + env.error.message);
+    exit(1);
+  }
+  println(org + " has at least " + str(env.result.count) + " repositories (auth: " + env.result.auth + ")");
+  for (name in env.result.names) {
+    println("  " + name);
+  }
+}
+
+# The same document also describes cred_list, llm_chat, http_request, github_user;
+# lmscript help ../schema/lmconn.cli.schema.v1.json lists them with their parameters.
