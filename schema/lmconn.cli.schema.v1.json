@@ -1,0 +1,341 @@
+{
+  "schema": "cli.schema.v1",
+  "tool": "lmconn",
+  "version": "0.1.0",
+  "policy": {
+    "dryrun": false,
+    "readonly": false
+  },
+  "inputs": [
+    "flags",
+    "json"
+  ],
+  "operations": [
+    {
+      "name": "cred_set",
+      "access": "write",
+      "description": "Store a credential using exactly one of value, env, or stdin",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "occurs": "1",
+          "description": "Service name"
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "occurs": "1",
+          "description": "Credential field name"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "occurs": "?",
+          "description": "Credential value (visible in argv; prefer env or stdin)"
+        },
+        {
+          "name": "env",
+          "type": "string",
+          "occurs": "?",
+          "description": "Environment variable containing the credential"
+        },
+        {
+          "name": "stdin",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Read the complete credential from stdin"
+        }
+      ]
+    },
+    {
+      "name": "cred_get",
+      "access": "read",
+      "description": "Check presence; reveal returns the value or NOT_FOUND",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "occurs": "1",
+          "description": "Service name"
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "occurs": "1",
+          "description": "Credential field name"
+        },
+        {
+          "name": "reveal",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Include the secret value in the result for piping"
+        }
+      ]
+    },
+    {
+      "name": "cred_list",
+      "access": "read",
+      "description": "List credential names and timestamps only",
+      "params": []
+    },
+    {
+      "name": "cred_delete",
+      "access": "write",
+      "description": "Delete a credential",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "occurs": "1",
+          "description": "Service name"
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "occurs": "1",
+          "description": "Credential field name"
+        }
+      ]
+    },
+    {
+      "name": "cred_path",
+      "access": "read",
+      "description": "Return the credential database path",
+      "params": []
+    },
+    {
+      "name": "llm_providers",
+      "access": "read",
+      "description": "List providers and credential sources (never keys)",
+      "params": []
+    },
+    {
+      "name": "llm_chat",
+      "access": "write",
+      "description": "Send a prompt to an LLM provider",
+      "params": [
+        {
+          "name": "provider",
+          "type": "string",
+          "description": "Provider name"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "occurs": "?",
+          "description": "model"
+        },
+        {
+          "name": "system",
+          "type": "string",
+          "occurs": "?",
+          "description": "system"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "occurs": "?",
+          "description": "prompt"
+        },
+        {
+          "name": "promptFile",
+          "type": "string",
+          "occurs": "?",
+          "description": "Read prompt from a UTF-8 file"
+        },
+        {
+          "name": "maxTokens",
+          "type": "number",
+          "occurs": "?",
+          "default": 256,
+          "description": "Maximum API completion tokens"
+        },
+        {
+          "name": "stdin",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Read prompt from stdin (default without a prompt option)"
+        }
+      ]
+    },
+    {
+      "name": "llm_probe",
+      "access": "write",
+      "description": "Probe selected providers, or all providers by default",
+      "params": [
+        {
+          "name": "provider",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Provider names"
+        }
+      ]
+    },
+    {
+      "name": "http_request",
+      "access": "write",
+      "description": "Send one HTTP request and return status, headers summary and the body (JSON parsed when possible)",
+      "params": [
+        {
+          "name": "url",
+          "type": "string",
+          "positional": true,
+          "description": "Absolute http(s) URL"
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "occurs": "?",
+          "default": "GET",
+          "description": "HTTP method (default GET, or POST when data is given)"
+        },
+        {
+          "name": "header",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Request header as \"Name: value\" (repeatable)"
+        },
+        {
+          "name": "data",
+          "type": "string",
+          "occurs": "?",
+          "description": "Request body (sets Content-Type application/json when it parses as JSON)"
+        },
+        {
+          "name": "dataFile",
+          "type": "string",
+          "occurs": "?",
+          "description": "Read the request body from a file"
+        },
+        {
+          "name": "auth",
+          "type": "string",
+          "occurs": "?",
+          "description": "Credential service whose api_key is sent as Authorization: Bearer"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "github_user",
+      "access": "read",
+      "description": "Return the authenticated GitHub user (login, name, id, publicRepos)",
+      "params": []
+    },
+    {
+      "name": "github_repos",
+      "access": "read",
+      "description": "List repository names of an organisation or user",
+      "params": [
+        {
+          "name": "org",
+          "type": "string",
+          "positional": true,
+          "description": "Organisation or user login"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "occurs": "?",
+          "default": 30,
+          "description": "Maximum number of names (1..1000)"
+        }
+      ]
+    }
+  ],
+  "globals": [
+    {
+      "name": "dryrun",
+      "type": "boolean",
+      "occurs": "?",
+      "aliases": [
+        "dry-run"
+      ],
+      "description": "Simulate write operations"
+    },
+    {
+      "name": "readonly",
+      "type": "boolean",
+      "occurs": "?",
+      "aliases": [
+        "read-only"
+      ],
+      "description": "Refuse to run write operations"
+    },
+    {
+      "name": "confirm",
+      "type": "boolean",
+      "occurs": "?",
+      "aliases": [
+        "i-understand"
+      ],
+      "description": "Confirm dangerous operations"
+    },
+    {
+      "name": "json",
+      "type": "boolean",
+      "occurs": "?",
+      "description": "Output as JSON"
+    },
+    {
+      "name": "help",
+      "type": "boolean",
+      "occurs": "?",
+      "aliases": [
+        "h"
+      ],
+      "description": "Show help"
+    },
+    {
+      "name": "list",
+      "type": "boolean",
+      "occurs": "?",
+      "description": "List operations as JSON"
+    },
+    {
+      "name": "schema",
+      "type": "boolean",
+      "occurs": "?",
+      "description": "Print schema document"
+    },
+    {
+      "name": "explain",
+      "type": "string",
+      "occurs": "?",
+      "description": "Explain an operation"
+    },
+    {
+      "name": "format",
+      "type": "string",
+      "occurs": "?",
+      "description": "Format for explain (text or json)"
+    },
+    {
+      "name": "input-json",
+      "type": "string",
+      "occurs": "?",
+      "aliases": [
+        "inputJson"
+      ],
+      "description": "JSON document input"
+    },
+    {
+      "name": "input-file",
+      "type": "string",
+      "occurs": "?",
+      "aliases": [
+        "inputFile"
+      ],
+      "description": "Path to file containing JSON document input"
+    }
+  ]
+}
