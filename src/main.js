@@ -27,9 +27,19 @@ export async function main(argv) {
     return 0;
   }
   if (argv.includes('--cli-schema')) {
+    // lmapi contract: the bare cli.schema.v1 document, not the envelope (lmscript imports it as is).
     const mod = await import('./schema.js');
-    emit(ok(mod.schemaDocument()));
+    process.stdout.write(JSON.stringify(await mod.schemaDocument(), null, 2) + '\n');
     return 0;
+  }
+  if (argv.includes('--input-json') || argv.includes('--input-file')) {
+    // Schema-module call from lmscript: lmconn <op> --input-json '{"op","params"}' -> ordinary argv.
+    const mod = await import('./schema.js');
+    try {
+      argv = await mod.argvFromSchemaCall(argv);
+    } catch (err) {
+      return emitFail(err.code === 'USAGE' || err.code === 'READONLY' ? err.code : 'USAGE', err.message);
+    }
   }
   const area = argv[0];
   if (!area || argv.includes('--help') || argv.includes('-h')) {
