@@ -71,7 +71,7 @@ export async function run(args) {
 export const ops = [
   { name: 'llm providers', access: 'read', description: 'List providers and credential sources (never keys)', params: [] },
   { name: 'llm chat', access: 'write', description: 'Send a prompt to an LLM provider', params: [
-    { name: 'provider', type: 'string', description: 'Provider name' },
+    { name: 'provider', type: 'string', positional: true, description: 'Provider name' },
     ...['model', 'system', 'prompt', 'prompt-file'].map(name => ({ name, type: 'string', occurs: '?', description: name === 'prompt-file' ? 'Read prompt from a UTF-8 file' : name })),
     { name: 'max-tokens', type: 'number', occurs: '?', default: 256, description: 'Maximum API completion tokens' },
     { name: 'stdin', type: 'boolean', occurs: '?', description: 'Read prompt from stdin (default without a prompt option)' },

@@ -3,9 +3,10 @@
 //   export const ops = [...]  (cli.schema.v1 operation fragments, optional)
 // Missing module = not implemented yet, exit 2 with a clear name.
 
+import { readFileSync } from 'node:fs';
 import { emit, ok, emitFail } from './result.js';
 
-const VERSION = '0.1.0';
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const AREAS = new Set(['cred', 'llm', 'http', 'github']);
 

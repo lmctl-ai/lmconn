@@ -2,8 +2,8 @@ import { openDb, setCred, getCred, listCreds, deleteCred, dbPath } from './creds
 import { emit, ok, emitFail } from './result.js';
 
 const identity = [
-  { name: 'service', type: 'string', occurs: '1', description: 'Service name' },
-  { name: 'field', type: 'string', occurs: '1', description: 'Credential field name' },
+  { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Service name' },
+  { name: 'field', type: 'string', occurs: '1', positional: true, description: 'Credential field name' },
 ];
 
 export const ops = [

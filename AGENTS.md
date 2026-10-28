@@ -22,6 +22,10 @@ store uses `node:sqlite`. Tests use `node --test`.
 - `src/providers/index.js` owns the provider table. Add a provider there,
   then implement its adapter: `src/providers/api.js` (kind 'api',
   OpenAI-compatible) or `src/providers/cli.js` (kind 'cli', agent CLIs).
+- Operation naming for the schema: write ops as `<area> <sub>` (schema.js
+  normalises to `<area>_<sub>`) with camelCase or kebab params. Params that
+  arrive as positional CLI arguments must say `positional: true`, or
+  lmscript's `--input-json` bridge cannot reach them.
 
 ## Ownership (initial wave)
 

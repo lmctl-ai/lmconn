@@ -20,12 +20,14 @@
           "name": "service",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Service name"
         },
         {
           "name": "field",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Credential field name"
         },
         {
@@ -57,12 +59,14 @@
           "name": "service",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Service name"
         },
         {
           "name": "field",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Credential field name"
         },
         {
@@ -88,12 +92,14 @@
           "name": "service",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Service name"
         },
         {
           "name": "field",
           "type": "string",
           "occurs": "1",
+          "positional": true,
           "description": "Credential field name"
         }
       ]
@@ -118,6 +124,7 @@
         {
           "name": "provider",
           "type": "string",
+          "positional": true,
           "description": "Provider name"
         },
         {
@@ -254,15 +261,6 @@
   ],
   "globals": [
     {
-      "name": "dryrun",
-      "type": "boolean",
-      "occurs": "?",
-      "aliases": [
-        "dry-run"
-      ],
-      "description": "Simulate write operations"
-    },
-    {
       "name": "readonly",
       "type": "boolean",
       "occurs": "?",
@@ -272,19 +270,10 @@
       "description": "Refuse to run write operations"
     },
     {
-      "name": "confirm",
-      "type": "boolean",
-      "occurs": "?",
-      "aliases": [
-        "i-understand"
-      ],
-      "description": "Confirm dangerous operations"
-    },
-    {
       "name": "json",
       "type": "boolean",
       "occurs": "?",
-      "description": "Output as JSON"
+      "description": "Output as JSON (the envelope is always JSON)"
     },
     {
       "name": "help",
@@ -294,30 +283,6 @@
         "h"
       ],
       "description": "Show help"
-    },
-    {
-      "name": "list",
-      "type": "boolean",
-      "occurs": "?",
-      "description": "List operations as JSON"
-    },
-    {
-      "name": "schema",
-      "type": "boolean",
-      "occurs": "?",
-      "description": "Print schema document"
-    },
-    {
-      "name": "explain",
-      "type": "string",
-      "occurs": "?",
-      "description": "Explain an operation"
-    },
-    {
-      "name": "format",
-      "type": "string",
-      "occurs": "?",
-      "description": "Format for explain (text or json)"
     },
     {
       "name": "input-json",

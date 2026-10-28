@@ -20,15 +20,9 @@ export const AREAS = ['cred', 'llm', 'http', 'github'];
 const PARAM_KEYS = ['name', 'type', 'occurs', 'default', 'enum', 'positional', 'items', 'description', 'aliases', 'cliOnly', 'docOnly', 'derived'];
 
 export const GLOBALS = [
-  { name: 'dryrun', type: 'boolean', occurs: '?', aliases: ['dry-run'], description: 'Simulate write operations' },
   { name: 'readonly', type: 'boolean', occurs: '?', aliases: ['read-only'], description: 'Refuse to run write operations' },
-  { name: 'confirm', type: 'boolean', occurs: '?', aliases: ['i-understand'], description: 'Confirm dangerous operations' },
-  { name: 'json', type: 'boolean', occurs: '?', description: 'Output as JSON' },
+  { name: 'json', type: 'boolean', occurs: '?', description: 'Output as JSON (the envelope is always JSON)' },
   { name: 'help', type: 'boolean', occurs: '?', aliases: ['h'], description: 'Show help' },
-  { name: 'list', type: 'boolean', occurs: '?', description: 'List operations as JSON' },
-  { name: 'schema', type: 'boolean', occurs: '?', description: 'Print schema document' },
-  { name: 'explain', type: 'string', occurs: '?', description: 'Explain an operation' },
-  { name: 'format', type: 'string', occurs: '?', description: 'Format for explain (text or json)' },
   { name: 'input-json', type: 'string', occurs: '?', aliases: ['inputJson'], description: 'JSON document input' },
   { name: 'input-file', type: 'string', occurs: '?', aliases: ['inputFile'], description: 'Path to file containing JSON document input' },
 ];

@@ -36,7 +36,7 @@ function assertStructure(doc) {
   }
   assert.ok(Array.isArray(doc.globals));
   assert.ok(!doc.globals.some((g) => g.name === 'input-graphql'));
-  assert.deepEqual(doc.globals.map((g) => g.name), ['dryrun', 'readonly', 'confirm', 'json', 'help', 'list', 'schema', 'explain', 'format', 'input-json', 'input-file']);
+  assert.deepEqual(doc.globals.map((g) => g.name), ['readonly', 'json', 'help', 'input-json', 'input-file']);
 }
 
 test('the real document validates structurally and contains this wave\'s operations', async () => {
