@@ -1,26 +1,13 @@
-# Chapter: lmconnectors - Country facts from REST Countries
-# Shows: JSON array results, capitals, population, and currency codes; system(argv) and the lmconn JSON envelope
-# Run: lmscript examples/free-countries.lms [name]
-# Needs: lmconn on PATH; node on PATH for URL encoding; internet access; no credentials
+# Chapter: lmconnectors - Country facts over GraphQL (countries.trevorblades.com)
+# Shows: a GraphQL POST through lmconn http request --data (n8n needs a dedicated GraphQL node for this);
+#        system(argv), the lmconn JSON envelope, one retry on 429/5xx
+# Run: lmscript examples/free-countries.lms [ISO2]
+# Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
   println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
   exit(0);
-}
-
-# This lmscript version has no URL encoder. Node receives data as argv, never shell text.
-fn url_encode(value) {
-  if (which("node") == null) {
-    println("ERROR: node is required to URL-encode parameters");
-    exit(1);
-  }
-  r = system(["node", "-e", "process.stdout.write(encodeURIComponent(process.argv[1]))", "--", value], 5000);
-  if (r.timed_out || r.code != 0) {
-    println("ERROR: URL encoding failed");
-    exit(1);
-  }
-  return r.stdout;
 }
 
 # HTTP errors still have env.ok=true: inspect result.status before bodyJson.
@@ -63,21 +50,25 @@ fn fetch_json(argv) {
   }
 }
 
-name = ARGV.get(0, "japan");
-url = "https://restcountries.com/v3.1/name/" + url_encode(name) + "?fields=name,capital,population,currencies,flags";
-countries = fetch_json(["lmconn", "http", "request", url, "--timeout", "40000"]);
-# Legacy v3.1 can return HTTP 200 with a deprecation error instead of an array.
-if (type(countries) != "array") {
-  println("REST Countries returned an API error instead of a country array: " + json_stringify(countries));
+code = ARGV.get(0, "JP");
+# restcountries.com retired its keyless API in 2026; this GraphQL endpoint needs no key.
+query = "{ country(code: \"" + code + "\") { name capital currency languages { name } } }";
+body = fetch_json(["lmconn", "http", "request", "https://countries.trevorblades.com/",
+  "--data", json_stringify({query: query}), "--timeout", "40000"]);
+if (body.has("errors") && body.errors != null) {
+  println("GraphQL error: " + json_stringify(body.errors));
   exit(1);
 }
-if (countries.len() == 0) {
-  println("No countries found for " + name);
+country = body.get("data", {}).get("country", null);
+if (country == null) {
+  println("No country found for ISO2 code " + code + " (use uppercase, e.g. JP, DE, BR)");
   exit(1);
 }
-for (country in countries) {
-  println("official name: " + country.name.official);
-  println("capital: " + join(country.get("capital", []), ", "));
-  println("population: " + str(country.population));
-  println("currency codes: " + join(country.get("currencies", {}).keys(), ", "));
+langs = [];
+for (lang in country.get("languages", [])) {
+  push(langs, lang.name);
 }
+println("name: " + country.name);
+println("capital: " + str(country.get("capital", "-")));
+println("currency: " + str(country.get("currency", "-")));
+println("languages: " + join(langs, ", "));

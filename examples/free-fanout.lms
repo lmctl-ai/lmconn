@@ -3,8 +3,9 @@
 #        order; per-call latency from the envelope (result.latencyMs) against the total wall time. In n8n
 #        the same workflow is four HTTP Request branches and a Merge node, executed one after another.
 # Run: lmscript examples/free-fanout.lms                 (lmconn on PATH: `npm link` in the repo)
-# Needs: lmconn on PATH, network; no credentials (catfact.ninja, api.agify.io, open.er-api.com and
-#        api.coingecko.com are free and anonymous)
+# Needs: lmconn on PATH, network; no credentials (catfact.ninja, ipwho.is, open.er-api.com and
+#        api.coingecko.com are free and anonymous; agify was dropped — its per-IP daily quota
+#        makes the flagship demo flaky on shared egress, see free-people-data.lms for the 429 path)
 # exit: 0
 if (which("lmconn") == null) {
   println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
@@ -30,7 +31,7 @@ fn fetch(label, url) {
 t0 = now();
 results = parallel([
   fetch("catfact", "https://catfact.ninja/fact"),
-  fetch("agify", "https://api.agify.io?name=ada"),
+  fetch("ipwhois", "https://ipwho.is/"),
   fetch("fxrates", "https://open.er-api.com/v6/latest/EUR"),
   fetch("coingecko", "https://api.coingecko.com/api/v3/ping")
 ]);
@@ -45,8 +46,8 @@ for (r in results) {
     println(f"{r.label}: FAILED {r.error}");
   } else if (r.label == "catfact") {
     println(f"{r.label} ({r.latencyMs} ms): {r.body.fact}");
-  } else if (r.label == "agify") {
-    println(f"{r.label} ({r.latencyMs} ms): ada is about {r.body.get("age", "?")} years old");
+  } else if (r.label == "ipwhois") {
+    println(f"{r.label} ({r.latencyMs} ms): we are at {r.body.get("ip", "?")} in {r.body.get("country", "?")}");
   } else if (r.label == "fxrates") {
     println(f"{r.label} ({r.latencyMs} ms): 1 EUR = {r.body.rates.USD} USD, {r.body.rates.GBP} GBP");
   } else {

@@ -1,5 +1,6 @@
 # Chapter: lmconnectors - Public IP information
-# Shows: Look up this machine public IP using ipapi.co, with one retry for rate limiting
+# Shows: Look up this machine public IP using ipwho.is (ipapi.co's daily quota is easily exhausted on
+#        shared egress IPs), with one retry for rate limiting
 # Run: lmscript examples/free-ip.lms 
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
@@ -43,9 +44,10 @@ fn request_json(argv) {
   }
 }
 
-body = request_json(["lmconn", "http", "request", "https://ipapi.co/json/"]);
-if (body.get("error", false)) {
-  println("IP lookup failed: " + str(body.get("reason", "unknown API error")));
+body = request_json(["lmconn", "http", "request", "https://ipwho.is/"]);
+if (!body.get("success", false)) {
+  println("IP lookup failed: " + str(body.get("message", "unknown API error")));
   exit(1);
 }
-println("ip: " + str(body.ip) + ", city: " + str(body.city) + ", country: " + str(body.country_name) + ", org: " + str(body.org));
+conn = body.get("connection", {});
+println("ip: " + str(body.ip) + ", city: " + str(body.get("city", "-")) + ", country: " + str(body.get("country", "-")) + ", org: " + str(conn.get("org", "-")));

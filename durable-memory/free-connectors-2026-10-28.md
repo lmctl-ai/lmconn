@@ -32,7 +32,7 @@ that drive public APIs through `lmconn http request`, plus
 
 ## What the fan-out demonstrates
 
-`free-fanout.lms` calls four services (catfact.ninja, api.agify.io,
+`free-fanout.lms` calls four services (catfact.ninja, ipwho.is,
 open.er-api.com, api.coingecko.com) inside `parallel([...])`, the idiom from
 `lmscript/24-cli-fanout.lms`. Results come back in input order; each carries
 the envelope's `latencyMs`, and the script prints the total wall time next
@@ -41,3 +41,24 @@ roughly 2 s of summed latency. In n8n the same workflow is four HTTP
 Request branches and a Merge node executed sequentially. The helper in that
 script never calls `exit`, so every branch is reported even when one fails;
 the script exits 1 only after printing all four.
+
+## Free APIs die; pick replacements with the same shape
+
+Integration testing the same day found three of the chosen services already
+unusable from our egress IP or entirely retired, and the fixes set the
+replacement policy: same example, same shape, different provider.
+
+- WorldTimeAPI returns ECONNRESET on every request (dead service);
+  `free-time.lms` moved to timeapi.io, same no-key model, JSON body.
+- restcountries.com retired its keyless v3.1 (HTTP 200 with a deprecation
+  payload, then a 301 to a legacy stub); `free-countries.lms` moved to the
+  countries.trevorblades.com GraphQL endpoint, which also turned the example
+  into the GraphQL-via-`--data` demo n8n needs a dedicated node for. Build
+  the JSON body with `json_stringify({query: ...})`, never string
+  concatenation — inner quotes break hand-built JSON.
+- ipapi.co and the agify/genderize/nationalize family enforce small per-IP
+  daily quotas; a shared egress IP burns them before noon. `free-ip.lms`
+  moved to ipwho.is. `free-fanout.lms` also dropped agify for ipwho.is: the
+  flagship demo should be green on any egress IP. `free-people-data.lms`
+  keeps the quota'd services on purpose: it demonstrates the retry path and
+  fails with a clear 429 message when the quota is spent.

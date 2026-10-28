@@ -1,5 +1,5 @@
-# Chapter: lmconnectors - Local time from WorldTimeAPI
-# Shows: Timezone path, HTTP retry, datetime, UTC offset, and day of week; system(argv) and the lmconn JSON envelope
+# Chapter: lmconnectors - Local time from timeapi.io
+# Shows: Query-param URL encoding, HTTP retry, datetime and day of week; system(argv) and the lmconn JSON envelope
 # Run: lmscript examples/free-time.lms [tz]
 # Needs: lmconn on PATH; node on PATH for URL encoding; internet access; no credentials
 # exit: 0
@@ -64,9 +64,8 @@ fn fetch_json(argv) {
 }
 
 tz = ARGV.get(0, "Europe/Berlin");
-# Keep timezone path separators while encoding each component.
-encoded_tz = replace_all(url_encode(tz), "%2F", "/");
-url = "https://worldtimeapi.org/api/timezone/" + encoded_tz;
+# WorldTimeAPI died in 2026 (connection reset); timeapi.io is the no-key replacement.
+url = "https://timeapi.io/api/time/current/zone?timeZone=" + url_encode(tz);
 body = fetch_json(["lmconn", "http", "request", url, "--timeout", "40000"]);
-println(tz + ": " + body.datetime);
-println("utc_offset: " + body.utc_offset + ", day_of_week: " + str(body.day_of_week) + " (0 = Sunday)");
+println(body.timeZone + ": " + body.dateTime);
+println("day_of_week: " + body.dayOfWeek + ", dst active: " + str(body.dstActive));
