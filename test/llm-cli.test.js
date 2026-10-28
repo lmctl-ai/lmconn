@@ -10,14 +10,15 @@ import { probe } from '../src/llm-probe.js';
 async function fixture(t, mode = 'echo') {
   const dir = await mkdtemp(join(tmpdir(), 'lmconn-cli-'));
   const script = join(dir, 'fixture.cjs');
-  await writeFile(script, `#!${process.execPath}\n
+  await writeFile(script, `
 const mode = process.argv[2];
 if (mode === 'fail') { process.stderr.write('fixture failure ' + 'x'.repeat(600)); process.exitCode = 7; }
 else if (mode === 'sleep') { setTimeout(() => {}, 60000); }
-else { if (process.cwd() !== '/tmp') process.exit(9); console.log(process.argv.at(-1)); }
+else { if (process.cwd() !== require('node:fs').realpathSync(require('node:os').tmpdir())) process.exit(9); console.log(process.argv.at(-1)); }
 `, { mode: 0o755 });
   const name = `fixture-${mode}`;
-  providers[name] = { kind: 'cli', cmd: [script, mode], timeoutMs: 2000 };
+  // Spawn through the node binary: a bare .cjs path is not executable on Windows.
+  providers[name] = { kind: 'cli', cmd: [process.execPath, script, mode], timeoutMs: 2000 };
   t.after(async () => { delete providers[name]; await rm(dir, { recursive: true, force: true }); });
   return name;
 }

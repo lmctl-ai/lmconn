@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { providers } from './index.js';
 
@@ -15,7 +16,7 @@ export async function chatCli(name, { prompt, system, timeoutMs } = {}) {
   const started = performance.now();
   return new Promise((resolve, reject) => {
     const child = spawn(provider.cmd[0], [...provider.cmd.slice(1), input], {
-      cwd: '/tmp',
+      cwd: tmpdir(),
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
