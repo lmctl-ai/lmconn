@@ -3,10 +3,13 @@
 //   export const ops = [...]  (cli.schema.v1 operation fragments, optional)
 // Missing module = not implemented yet, exit 2 with a clear name.
 
-import { readFileSync } from 'node:fs';
 import { emit, ok, emitFail } from './result.js';
+import { AREA_LOADERS } from './schema.js';
+// JSON import attribute: works under Node >= 22.5 and gets embedded into
+// bun --compile binaries, where a runtime readFileSync of ../package.json fails.
+import pkg from '../package.json' with { type: 'json' };
 
-const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const VERSION = pkg.version || '0.0.0';
 
 const AREAS = new Set(['cred', 'llm', 'http', 'github']);
 
@@ -51,10 +54,10 @@ export async function main(argv) {
     return emitFail('USAGE', `unknown area: ${area}`, { areas: [...AREAS] });
   }
   try {
-    const mod = await import(`./cmd-${area}.js`);
+    const mod = await AREA_LOADERS[area]();
     return await mod.run(argv.slice(1));
   } catch (err) {
-    if (err?.code === 'ERR_MODULE_NOT_FOUND' && String(err?.message).includes(`cmd-${area}`)) {
+    if (err?.code === 'ERR_MODULE_NOT_FOUND') {
       return emitFail('NOT_IMPLEMENTED', `area not implemented yet: ${area}`);
     }
     throw err;

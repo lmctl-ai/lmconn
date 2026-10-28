@@ -44,3 +44,17 @@ commit message.
 
 Wiki-style: commit early, `git pull --rebase` before every push, push often.
 One commit touches your own files unless the change is the point.
+
+## Build & CI
+
+- `.github/workflows/ci.yml` runs on every push to master and every `v*` tag:
+  node test matrix (ubuntu/macos/windows) → bun cross-compile
+  (`bun build --compile --minify --target=bun-<target>` for linux-x64,
+  linux-arm64, darwin-x64, darwin-arm64, windows-x64) → native smoke test of
+  the binary (`bun scripts/smoke.js <binary>`) → GitHub Release. Master pushes
+  update the rolling `latest` prerelease; `v*` tags get a versioned release.
+- The binary must stay bun-compilable: no template-literal dynamic imports
+  (use `AREA_LOADERS` in `src/schema.js`), no runtime reads of
+  `../package.json` (use the JSON import attribute), and stick to Node
+  built-ins that Bun implements (`node:sqlite` works).
+- Add a check to `scripts/smoke.js` whenever you add an operation.

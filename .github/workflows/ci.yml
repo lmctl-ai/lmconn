@@ -1,0 +1,108 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm test
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: compile
+        run: |
+          exe=""; [ "${{ matrix.target }}" = "windows-x64" ] && exe=".exe"
+          bun build --compile --minify --target="bun-${{ matrix.target }}" bin/lmconn.js --outfile "dist/lmconn-${{ matrix.target }}${exe}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lmconn-${{ matrix.target }}
+          path: dist/
+          retention-days: 7
+
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: macos-latest, target: darwin-arm64 }
+          - { os: windows-latest, target: windows-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: lmconn-${{ matrix.target }}
+      - name: smoke test the binary
+        shell: bash
+        run: |
+          exe=""; [ "${{ matrix.target }}" = "windows-x64" ] && exe=".exe"
+          chmod +x "lmconn-${{ matrix.target }}${exe}" 2>/dev/null || true
+          bun scripts/smoke.js "./lmconn-${{ matrix.target }}${exe}"
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: package assets
+        shell: bash
+        run: |
+          mkdir release
+          for d in dist/lmconn-*; do
+            name=$(basename "$d")
+            bin="$d/$name"; [ -f "$d/$name.exe" ] && bin="$d/$name.exe"
+            tar -C "$d" -czf "release/${name}.tar.gz" "$(basename "$bin")"
+          done
+          (cd dist && sha256sum lmconn-*/* > ../release/SHA256SUMS.txt)
+          ls -la release
+      - name: retarget rolling latest tag
+        if: github.ref_type == 'branch'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f latest
+          git push -f origin latest
+      - name: rolling latest release (master pushes)
+        if: github.ref_type == 'branch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest (rolling master build)
+          prerelease: true
+          files: release/*
+      - name: versioned release (tags)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*

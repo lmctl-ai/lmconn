@@ -13,6 +13,8 @@
 // published as camelCase maps to the kebab-case flag (dataFile -> --data-file).
 
 import { readFileSync } from 'node:fs';
+// JSON import attribute so the version survives bun --compile (no ../package.json in a binary).
+import pkg from '../package.json' with { type: 'json' };
 
 export const AREAS = ['cred', 'llm', 'http', 'github'];
 
@@ -28,9 +30,7 @@ export const GLOBALS = [
 ];
 
 export function packageVersion() {
-  try {
-    return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version || '0.0.0';
-  } catch { return '0.0.0'; }
+  return pkg.version || '0.0.0';
 }
 
 export const camelCase = (s) => s.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
@@ -63,16 +63,33 @@ export function normalizeOp(area, fragment) {
   return { op, cli };
 }
 
+// Static loaders so `bun build --compile` bundles the area modules — a
+// template-literal dynamic import is invisible to the bundler and the binary
+// would ship zero areas.
+export const AREA_LOADERS = {
+  cred: () => import('./cmd-cred.js'),
+  llm: () => import('./cmd-llm.js'),
+  http: () => import('./cmd-http.js'),
+  github: () => import('./cmd-github.js'),
+};
+
 // Loads every area's ops. A missing module (not implemented yet) is skipped
 // silently; any other import error is reported on stderr and skipped too.
-export async function collectOps({ areas = AREAS, resolve = (area) => `./cmd-${area}.js`, warn = (m) => process.stderr.write(m + '\n') } = {}) {
+// A custom `resolve` (used by tests) takes precedence over the static loaders.
+export async function collectOps({ areas = AREAS, resolve, warn = (m) => process.stderr.write(m + '\n') } = {}) {
   const operations = [];
   const bridge = new Map();
   for (const area of areas) {
-    const href = resolve(area);
     let fragments;
     try {
-      fragments = (await import(href)).ops || [];
+      let mod;
+      if (resolve) mod = await import(resolve(area));
+      else {
+        const load = AREA_LOADERS[area];
+        if (!load) throw Object.assign(new Error(`unknown area: ${area}`), { code: 'ERR_MODULE_NOT_FOUND' });
+        mod = await load();
+      }
+      fragments = mod.ops || [];
     } catch (err) {
       if (err?.code !== 'ERR_MODULE_NOT_FOUND') warn(`schema: skipping ${area}: ${err?.message || err}`);
       continue;

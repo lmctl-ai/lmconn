@@ -7,6 +7,19 @@ the server. Plain ESM Node >= 22.5, zero npm dependencies.
 
 ## Install
 
+Prebuilt single-file binaries (Bun-compiled, no Node needed) are attached to
+every release — the rolling `latest` prerelease tracks master, `v*` tags are
+stable:
+
+```sh
+curl -L https://github.com/lmctl-ai/lmconnectors/releases/latest/download/lmconn-linux-x64.tar.gz | tar xz
+./lmconn-linux-x64 --version
+```
+
+Targets: linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64.
+
+From source:
+
 ```sh
 npm link        # puts lmconn on PATH
 npm test        # node --test
