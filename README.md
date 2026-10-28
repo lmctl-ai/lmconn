@@ -160,21 +160,21 @@ map against n8n's connector categories is in
 | `free-animal-facts.lms` | catfact.ninja, dog.ceo | two independent calls merged into one summary |
 | `free-people-data.lms [name]` | agify, genderize, nationalize | one input enriched by three services, top-2 selection |
 | `free-fanout.lms` | catfact, agify, open.er-api, coingecko | four calls in `parallel([...])`, per-call latency against total wall time |
-| `free-weather-openmeteo.lms` | open-meteo.com | current weather for coordinates, no key |
-| `free-weather-wttr.lms` | wttr.in | weather for a city name as JSON |
-| `free-countries.lms` | restcountries.com | country facts: capital, population, currencies |
-| `free-geocode.lms` | nominatim.openstreetmap.org | place name to coordinates |
-| `free-time.lms` | worldtimeapi.org | current time for a timezone |
-| `free-hackernews.lms` | hacker-news.firebaseio.com | top stories, one call per item |
-| `free-jsonplaceholder.lms` | jsonplaceholder.typicode.com | GET and POST with a JSON body |
-| `free-httpbin.lms` | httpbin.org | headers, methods and status codes echoed back |
-| `free-dns.lms` | dns.google | DNS over HTTPS lookup |
-| `free-ip.lms` | ipify / ip-api | public IP and its geolocation |
-| `free-coingecko.lms` | api.coingecko.com | crypto prices |
-| `free-fxrates.lms` | open.er-api.com | exchange rates for a base currency |
-| `free-arxiv.lms` | export.arxiv.org | paper search, non-JSON body handled as text |
-| `free-openlibrary.lms` | openlibrary.org | book search by title or author |
-| `free-wikipedia.lms` | wikipedia.org REST | article summary |
+| `free-weather-openmeteo.lms` | api.open-meteo.com | current temperature, wind speed and weather code for coordinates |
+| `free-weather-wttr.lms` | wttr.in | URL-encoded city name, current condition as JSON |
+| `free-countries.lms` | restcountries.com | JSON array results: capital, population, currency codes |
+| `free-geocode.lms` | nominatim.openstreetmap.org | place name to up to three hits, with the descriptive User-Agent the service requires |
+| `free-time.lms` | worldtimeapi.org | datetime, UTC offset and day of week for a timezone |
+| `free-hackernews.lms` | hn.algolia.com | story search with an encoded query, five hits |
+| `free-jsonplaceholder.lms` | jsonplaceholder.typicode.com | GET a post, then POST a JSON body (writes are simulated by the API) |
+| `free-httpbin.lms` | httpbin.org | custom header sent, echoed method, URL, headers and query inspected |
+| `free-dns.lms` | dns.google | DNS over HTTPS, every answer record printed |
+| `free-ip.lms` | ipapi.co | this machine's public IP and location |
+| `free-coingecko.lms` | api.coingecko.com | USD and EUR prices for a coin |
+| `free-fxrates.lms` | open.er-api.com | base currency, update date and four exchange rates |
+| `free-arxiv.lms` | export.arxiv.org | non-JSON response: titles and IDs extracted from Atom XML in bodyText |
+| `free-openlibrary.lms` | openlibrary.org | three books with first author and first publication year |
+| `free-wikipedia.lms` | en.wikipedia.org REST | URL-encoded title, short article extract |
 
 ## Layout
 
