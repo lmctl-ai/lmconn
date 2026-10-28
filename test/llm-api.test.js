@@ -8,6 +8,7 @@ import { once } from 'node:events';
 import { providers } from '../src/providers/index.js';
 import { chatApi } from '../src/providers/api.js';
 import { run } from '../src/cmd-llm.js';
+import { closeDb } from '../src/creds.js';
 
  test('local OpenAI-compatible adapter and llm envelopes', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'lmconn-api-'));
@@ -39,6 +40,7 @@ import { run } from '../src/cmd-llm.js';
     delete providers.localtest;
     if (oldDb === undefined) delete process.env.LMCONN_DB; else process.env.LMCONN_DB = oldDb;
     if (oldKey === undefined) delete process.env.LMCONN_TEST_API_KEY; else process.env.LMCONN_TEST_API_KEY = oldKey;
+    closeDb(join(dir, 'creds.db')); // Windows: open handle blocks rm
     await rm(dir, { recursive: true, force: true });
   });
   async function capture(args) {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { run } from '../src/cmd-cred.js';
+import { closeDb } from '../src/creds.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'lmconn-cred-test-'));
 const originalDb = process.env.LMCONN_DB;
@@ -12,6 +13,7 @@ process.env.LMCONN_DB = join(directory, 'creds.db');
 after(() => {
   if (originalDb === undefined) delete process.env.LMCONN_DB;
   else process.env.LMCONN_DB = originalDb;
+  closeDb(join(directory, 'creds.db')); // Windows: open handle blocks rm
   rmSync(directory, { recursive: true, force: true });
 });
 

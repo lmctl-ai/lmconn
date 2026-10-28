@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run, resolveToken, ops } from '../src/cmd-github.js';
-import { setCred, deleteCred } from '../src/creds.js';
+import { setCred, deleteCred, closeDb } from '../src/creds.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'lmconn-github-test-'));
 const originalDb = process.env.LMCONN_DB;
@@ -14,6 +14,7 @@ delete process.env.GITHUB_TOKEN; delete process.env.GH_TOKEN;
 after(() => {
   if (originalDb === undefined) delete process.env.LMCONN_DB; else process.env.LMCONN_DB = originalDb;
   for (const [k, v] of Object.entries(originalEnv)) if (v !== undefined) process.env[k] = v;
+  closeDb(join(directory, 'creds.db')); // Windows: open handle blocks rm
   rmSync(directory, { recursive: true, force: true });
 });
 

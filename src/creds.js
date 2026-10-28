@@ -11,7 +11,14 @@ export function dbPath() {
   return process.env.LMCONN_DB || join(homedir(), '.lmconnectors', 'creds.db');
 }
 
+// One cached connection per path: opening a DatabaseSync per call leaks a
+// handle on every operation, and on Windows an open handle makes the file
+// undeletable (EBUSY in test teardown). closeDb() exists for that teardown.
+const cache = new Map();
+
 export function openDb(path = dbPath()) {
+  const cached = cache.get(path);
+  if (cached) return cached;
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE IF NOT EXISTS creds (
@@ -21,8 +28,18 @@ export function openDb(path = dbPath()) {
     updated_at TEXT NOT NULL,
     PRIMARY KEY (service, field)
   )`);
-  try { chmodSync(path, 0o600); } catch { /* best effort */ }
+  // chmod maps to the read-only attribute on Windows, which then blocks
+  // deletion; ACLs already keep the file user-private there.
+  if (process.platform !== 'win32') {
+    try { chmodSync(path, 0o600); } catch { /* best effort */ }
+  }
+  cache.set(path, db);
   return db;
+}
+
+export function closeDb(path = dbPath()) {
+  const db = cache.get(path);
+  if (db) { db.close(); cache.delete(path); }
 }
 
 export function setCred(service, field, value, db = openDb()) {

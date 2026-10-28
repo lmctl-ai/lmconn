@@ -76,9 +76,9 @@ export async function run(args) {
   } catch {
     // Never echo underlying errors: they can contain credential input.
     return emitFail('CREDENTIAL_ERROR', 'Credential operation failed');
-  } finally {
-    db?.close();
   }
+  // The connection stays cached (creds.js); the process exits after one
+  // command and the runtime closes it. Long-lived hosts call closeDb().
   emit(ok(result));
   return 0;
 }

@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run, parseArgs, envNameFor } from '../src/cmd-http.js';
-import { setCred } from '../src/creds.js';
+import { setCred, closeDb } from '../src/creds.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'lmconn-http-test-'));
 const originalDb = process.env.LMCONN_DB;
@@ -40,6 +40,7 @@ before(async () => {
 after(() => {
   server.close();
   if (originalDb === undefined) delete process.env.LMCONN_DB; else process.env.LMCONN_DB = originalDb;
+  closeDb(join(directory, 'creds.db')); // Windows: open handle blocks rm
   rmSync(directory, { recursive: true, force: true });
 });
 
