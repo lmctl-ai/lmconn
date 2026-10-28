@@ -17,7 +17,7 @@ export const providers = {
     kind: 'api',
     baseUrl: 'https://openrouter.ai/api/v1',
     keyEnv: 'OPENROUTER_API_KEY',
-    defaultModel: 'liquid/lfm-2.5-2.6b:free',
+    defaultModel: 'nvidia/nemotron-3.5-lightning:free',
   },
   'ollama-cloud': {
     kind: 'api',
