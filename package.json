@@ -1,0 +1,17 @@
+{
+  "name": "@lmctl-ai/lmconnectors",
+  "version": "0.1.0",
+  "description": "Connectors for lmscript: LLM providers and legacy services as one CLI, credentials in SQLite",
+  "type": "module",
+  "bin": {
+    "lmconn": "bin/lmconn.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "schema": "node bin/lmconn.js --cli-schema --json > schema/lmconn.cli.schema.v1.json"
+  },
+  "license": "MIT"
+}
