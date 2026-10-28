@@ -1,0 +1,50 @@
+# Chapter: lmconnectors - JSONPlaceholder fake REST CRUD
+# Shows: GET a post, then POST JSON with the HTTP Request connector; writes are simulated by the API
+# Run: lmscript examples/free-jsonplaceholder.lms 
+# Needs: lmconn on PATH; internet access; no credentials
+# exit: 0
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+fn request_json(argv) {
+  for (attempt = 0; attempt < 2; attempt = attempt + 1) {
+    r = system(argv, 45000);
+    if (r.timed_out) {
+      println("lmconn timed out");
+      exit(1);
+    }
+    env = json_parse(r.stdout);
+    if (!env.ok) {
+      println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+      exit(1);
+    }
+    res = env.result;
+    if (attempt == 0 && (res.status == 429 || (res.status >= 500 && res.status < 600))) {
+      println("HTTP " + str(res.status) + ": retrying once in 3 seconds");
+      sleep_ms(3000);
+      continue;
+    }
+    if (res.status == 429) {
+      println("HTTP 429: rate-limited after retry; try again later");
+      exit(1);
+    }
+    if (!res.ok) {
+      println("HTTP request failed: " + str(res.status) + " " + res.url);
+      exit(1);
+    }
+    if (!res.has("bodyJson")) {
+      println("HTTP response was not JSON: " + res.url);
+      exit(1);
+    }
+    return res.bodyJson;
+  }
+}
+
+post = request_json(["lmconn", "http", "request", "https://jsonplaceholder.typicode.com/posts/1"]);
+println("GET: id=" + str(post.id) + ", userId=" + str(post.userId) + ", title=" + post.title);
+payload = json_stringify({title: "Hello from lmscript", body: "A workflow using lmconn instead of an HTTP connector node", userId: 1});
+created = request_json(["lmconn", "http", "request", "https://jsonplaceholder.typicode.com/posts", "--method", "POST", "--data", payload]);
+println("POST (simulated, not persisted): id=" + str(created.id) + ", userId=" + str(created.userId) + ", title=" + created.title + ", body=" + created.body);
