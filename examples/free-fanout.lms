@@ -1,0 +1,57 @@
+# Chapter: lmconnectors - free APIs: four services in parallel
+# Shows: parallel([...]) running four lmconn http request calls at once and returning results in input
+#        order; per-call latency from the envelope (result.latencyMs) against the total wall time. In n8n
+#        the same workflow is four HTTP Request branches and a Merge node, executed one after another.
+# Run: lmscript examples/free-fanout.lms                 (lmconn on PATH: `npm link` in the repo)
+# Needs: lmconn on PATH, network; no credentials (catfact.ninja, api.agify.io, open.er-api.com and
+#        api.coingecko.com are free and anonymous)
+# exit: 0
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# One GET through lmconn; never exits, so the fan-out can report every branch. Retries once on 429/5xx.
+fn fetch(label, url) {
+  attempt = 0;
+  while (true) {
+    attempt = attempt + 1;
+    r = system(["lmconn", "http", "request", url, "--timeout", "15000"], 20000);
+    if (r.timed_out) { return {label: label, ok: false, error: "lmconn timed out", latencyMs: 0}; }
+    env = json_parse(r.stdout);
+    if (!env.ok) { return {label: label, ok: false, error: env.error.code + ": " + env.error.message, latencyMs: 0}; }
+    res = env.result;
+    if ((res.status == 429 || res.status >= 500) && attempt == 1) { sleep_ms(3000); continue; }
+    if (!res.ok || !res.has("bodyJson")) { return {label: label, ok: false, error: "HTTP " + str(res.status), latencyMs: res.latencyMs}; }
+    return {label: label, ok: true, body: res.bodyJson, latencyMs: res.latencyMs};
+  }
+}
+
+t0 = now();
+results = parallel([
+  fetch("catfact", "https://catfact.ninja/fact"),
+  fetch("agify", "https://api.agify.io?name=ada"),
+  fetch("fxrates", "https://open.er-api.com/v6/latest/EUR"),
+  fetch("coingecko", "https://api.coingecko.com/api/v3/ping")
+]);
+wall = now() - t0;
+
+failed = 0;
+sum = 0;
+for (r in results) {
+  sum = sum + r.latencyMs;
+  if (!r.ok) {
+    failed = failed + 1;
+    println(f"{r.label}: FAILED {r.error}");
+  } else if (r.label == "catfact") {
+    println(f"{r.label} ({r.latencyMs} ms): {r.body.fact}");
+  } else if (r.label == "agify") {
+    println(f"{r.label} ({r.latencyMs} ms): ada is about {r.body.get("age", "?")} years old");
+  } else if (r.label == "fxrates") {
+    println(f"{r.label} ({r.latencyMs} ms): 1 EUR = {r.body.rates.USD} USD, {r.body.rates.GBP} GBP");
+  } else {
+    println(f"{r.label} ({r.latencyMs} ms): {r.body.gecko_says}");
+  }
+}
+println(f"total wall time: {wall} ms for 4 calls (sum of request latencies: {sum} ms)");
+if (failed > 0) { exit(1); }

@@ -146,6 +146,36 @@ after `npm link`:
 | `examples/llm-chat.lms [provider] [prompt]` | `system(["lmconn","llm","chat",...])` and parsing the envelope with `json_parse` |
 | `examples/schema-import.lms [org]` | importing the schema document and calling `lmconn.github_repos`; `--check` and `--dry-run` need neither lmconn nor network |
 
+### Free APIs, no credentials
+
+Each `free-*.lms` script drives a public API through `lmconn http request`,
+reads `result.bodyJson`, retries once on 429/5xx and prints a short summary.
+Swapping in an authenticated API is one `--auth SERVICE` flag. The coverage
+map against n8n's connector categories is in
+[docs/n8n-coverage.md](docs/n8n-coverage.md).
+
+| Script | API | Shows |
+|---|---|---|
+| `free-pokeapi.lms [name]` | pokeapi.co | one GET, nested maps and lists: types, abilities, move count |
+| `free-animal-facts.lms` | catfact.ninja, dog.ceo | two independent calls merged into one summary |
+| `free-people-data.lms [name]` | agify, genderize, nationalize | one input enriched by three services, top-2 selection |
+| `free-fanout.lms` | catfact, agify, open.er-api, coingecko | four calls in `parallel([...])`, per-call latency against total wall time |
+| `free-weather-openmeteo.lms` | open-meteo.com | current weather for coordinates, no key |
+| `free-weather-wttr.lms` | wttr.in | weather for a city name as JSON |
+| `free-countries.lms` | restcountries.com | country facts: capital, population, currencies |
+| `free-geocode.lms` | nominatim.openstreetmap.org | place name to coordinates |
+| `free-time.lms` | worldtimeapi.org | current time for a timezone |
+| `free-hackernews.lms` | hacker-news.firebaseio.com | top stories, one call per item |
+| `free-jsonplaceholder.lms` | jsonplaceholder.typicode.com | GET and POST with a JSON body |
+| `free-httpbin.lms` | httpbin.org | headers, methods and status codes echoed back |
+| `free-dns.lms` | dns.google | DNS over HTTPS lookup |
+| `free-ip.lms` | ipify / ip-api | public IP and its geolocation |
+| `free-coingecko.lms` | api.coingecko.com | crypto prices |
+| `free-fxrates.lms` | open.er-api.com | exchange rates for a base currency |
+| `free-arxiv.lms` | export.arxiv.org | paper search, non-JSON body handled as text |
+| `free-openlibrary.lms` | openlibrary.org | book search by title or author |
+| `free-wikipedia.lms` | wikipedia.org REST | article summary |
+
 ## Layout
 
 - `src/main.js` — argument router, `--cli-schema`, schema-call bridge
@@ -156,6 +186,7 @@ after `npm link`:
 - `src/schema.js` — cli.schema.v1 generator and `--input-json` bridge
 - `schema/` — generated cli.schema.v1 for lmscript import
 - `examples/` — lmscript scripts that drive lmconn
+- `docs/` — `n8n-coverage.md`, the coverage map against n8n connector categories
 - `durable-memory/` — design decisions (start at `durable-memory/index.md`)
 
 See AGENTS.md for the engineering contracts.

@@ -1,0 +1,62 @@
+# Chapter: lmconnectors - free APIs: enrich one name with three services
+# Shows: fanning one input into three GETs (agify, genderize, nationalize), reading nested result.bodyJson,
+#        sorting a list of maps, a single retry on 429/5xx. In n8n this is three HTTP Request nodes
+#        feeding a Merge node; here it is three calls and a few lines of lmscript.
+# Run: lmscript examples/free-people-data.lms [name]     (lmconn on PATH: `npm link` in the repo)
+# Needs: lmconn on PATH, network; no credentials (api.agify.io, api.genderize.io and api.nationalize.io
+#        are free and anonymous, about 100 requests per day each without a key)
+# exit: 0
+name = ARGV.get(0, "maria");
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# GET url through lmconn; returns the envelope's result map or exits 1. Retries once on 429/5xx.
+fn get_json(url) {
+  attempt = 0;
+  while (true) {
+    attempt = attempt + 1;
+    r = system(["lmconn", "http", "request", url, "--timeout", "15000"], 20000);
+    if (r.timed_out) { println("lmconn timed out: " + url); exit(1); }
+    env = json_parse(r.stdout);
+    if (!env.ok) { println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message); exit(1); }
+    res = env.result;
+    if ((res.status == 429 || res.status >= 500) && attempt == 1) {
+      println("HTTP " + str(res.status) + " from " + url + ", retrying in 3 s");
+      sleep_ms(3000);
+      continue;
+    }
+    if (!res.ok) { println("HTTP " + str(res.status) + " from " + url); exit(1); }
+    if (!res.has("bodyJson")) { println("response is not JSON: " + url); exit(1); }
+    return res;
+  }
+}
+
+age = get_json("https://api.agify.io?name=" + name).bodyJson;
+gender = get_json("https://api.genderize.io?name=" + name).bodyJson;
+nation = get_json("https://api.nationalize.io?name=" + name).bodyJson;
+
+println("name: " + name);
+println("predicted age: " + str(age.get("age", "unknown")) + " (sample " + str(age.get("count", 0)) + ")");
+println("gender: " + str(gender.get("gender", "unknown")) + " (probability " + str(gender.get("probability", 0)) + ")");
+
+# nationalize returns country: [{country_id, probability}, ...]; keep the two most likely.
+countries = nation.get("country", []);
+first = null;
+second = null;
+for (c in countries) {
+  if (first == null || c.probability > first.probability) {
+    second = first;
+    first = c;
+  } else if (second == null || c.probability > second.probability) {
+    second = c;
+  }
+}
+if (first == null) {
+  println("countries: none predicted");
+} else {
+  println(f"country: {first.country_id} (probability {first.probability})");
+  if (second != null) { println(f"country: {second.country_id} (probability {second.probability})"); }
+}

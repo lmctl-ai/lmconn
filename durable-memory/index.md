@@ -7,6 +7,7 @@ commands do, these pages record the decisions behind them.
 | Chapter | Covers |
 |---|---|
 | [v1 design decisions](v1-design.md) | SQLite credential store, the JSON envelope and exit codes, the provider registry, the cli.schema.v1 module and the `--input-json` bridge, the legacy connectors |
+| [Free-API example wave](free-connectors-2026-10-28.md) | why the `examples/free-*.lms` series uses credential-less public APIs, the conventions it fixed, what the parallel fan-out demonstrates |
 
 Conventions for new chapters: one h1, concise prose or tables, no emoji,
 dates written out (2026-10-28), link related pages by relative path.

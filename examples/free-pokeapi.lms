@@ -1,0 +1,47 @@
+# Chapter: lmconnectors - free APIs: PokeAPI through lmconn http request
+# Shows: one GET against a public JSON API, the envelope's result.bodyJson, picking fields out of nested
+#        maps and lists, a single retry on 429/5xx. In n8n this is an HTTP Request node plus a Set node.
+# Run: lmscript examples/free-pokeapi.lms [name]          (lmconn on PATH: `npm link` in the repo)
+# Needs: lmconn on PATH, network; no credentials (https://pokeapi.co is free and anonymous)
+# exit: 0
+name = ARGV.get(0, "pikachu");
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# GET url through lmconn; returns the envelope's result map or exits 1. Retries once on 429/5xx.
+fn get_json(url) {
+  attempt = 0;
+  while (true) {
+    attempt = attempt + 1;
+    r = system(["lmconn", "http", "request", url, "--timeout", "15000"], 20000);
+    if (r.timed_out) { println("lmconn timed out: " + url); exit(1); }
+    env = json_parse(r.stdout);
+    if (!env.ok) { println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message); exit(1); }
+    res = env.result;
+    if ((res.status == 429 || res.status >= 500) && attempt == 1) {
+      println("HTTP " + str(res.status) + " from " + url + ", retrying in 3 s");
+      sleep_ms(3000);
+      continue;
+    }
+    if (!res.ok) { println("HTTP " + str(res.status) + " from " + url); exit(1); }
+    if (!res.has("bodyJson")) { println("response is not JSON: " + url); exit(1); }
+    return res;
+  }
+}
+
+res = get_json("https://pokeapi.co/api/v2/pokemon/" + name);
+p = res.bodyJson;
+
+types = [];
+for (t in p.types) { push(types, t.type.name); }
+abilities = [];
+for (a in p.abilities) { if (abilities.len() < 5) { push(abilities, a.ability.name); } }
+
+println(f"name: {p.name} (#{p.id}), {res.latencyMs} ms");
+println(f"height: {p.height} dm, weight: {p.weight} hg");
+println("types: " + join(types, ", "));
+println("abilities (first 5): " + join(abilities, ", "));
+println(f"moves: {p.moves.len()}");

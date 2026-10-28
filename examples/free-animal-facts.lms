@@ -1,0 +1,38 @@
+# Chapter: lmconnectors - free APIs: two independent calls (cat fact, dog picture)
+# Shows: two GETs against unrelated public APIs in one script, each parsed from result.bodyJson,
+#        a single retry on 429/5xx. In n8n this is two HTTP Request nodes and a Merge node.
+# Run: lmscript examples/free-animal-facts.lms          (lmconn on PATH: `npm link` in the repo)
+# Needs: lmconn on PATH, network; no credentials (catfact.ninja and dog.ceo are free and anonymous)
+# exit: 0
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# GET url through lmconn; returns the envelope's result map or exits 1. Retries once on 429/5xx.
+fn get_json(url) {
+  attempt = 0;
+  while (true) {
+    attempt = attempt + 1;
+    r = system(["lmconn", "http", "request", url, "--timeout", "15000"], 20000);
+    if (r.timed_out) { println("lmconn timed out: " + url); exit(1); }
+    env = json_parse(r.stdout);
+    if (!env.ok) { println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message); exit(1); }
+    res = env.result;
+    if ((res.status == 429 || res.status >= 500) && attempt == 1) {
+      println("HTTP " + str(res.status) + " from " + url + ", retrying in 3 s");
+      sleep_ms(3000);
+      continue;
+    }
+    if (!res.ok) { println("HTTP " + str(res.status) + " from " + url); exit(1); }
+    if (!res.has("bodyJson")) { println("response is not JSON: " + url); exit(1); }
+    return res;
+  }
+}
+
+cat = get_json("https://catfact.ninja/fact");
+dog = get_json("https://dog.ceo/api/breeds/image/random");
+
+println(f"cat fact ({cat.latencyMs} ms): {cat.bodyJson.fact}");
+if (dog.bodyJson.status != "success") { println("dog.ceo returned status " + str(dog.bodyJson.status)); exit(1); }
+println(f"dog image ({dog.latencyMs} ms): {dog.bodyJson.message}");
