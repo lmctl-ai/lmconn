@@ -1,0 +1,59 @@
+# Chapter: Money - public cryptocurrency prices
+# Shows: CoinGecko USD/EUR prices and one retry for rate limits via lmconn http request
+# Run: lmscript examples/free-coingecko.lms [ids]
+# Needs: lmconn and node on PATH, internet access; no credentials
+# exit: 0
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# lmscript has no URL-encoding builtin; pass text as one argv element to Node.
+fn url_encode(value) {
+  r = system(["node", "-e", "process.stdout.write(encodeURIComponent(process.argv[1]))", "--", value], 5000);
+  if (r.timed_out || r.code != 0) {
+    println("URL encoding failed (node must be on PATH)");
+    exit(1);
+  }
+  return r.stdout;
+}
+
+fn fetch_public(url) {
+  for (attempt in [1, 2]) {
+    r = system(["lmconn", "http", "request", url, "--timeout", "30000", "--header", "User-Agent: lmconnectors-examples/0.1 (https://github.com/lmctl-ai/lmconnectors)"], 35000);
+    if (r.timed_out) {
+      println("lmconn timed out");
+      exit(1);
+    }
+    env = json_parse(r.stdout);
+    if (!env.ok) {
+      println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+      exit(1);
+    }
+    res = env.result;
+    if (attempt == 1 && (res.status == 429 || (res.status >= 500 && res.status <= 599))) {
+      println("HTTP " + str(res.status) + ": retrying once in 3 seconds");
+      sleep_ms(3000);
+    } else {
+      if (!res.ok) {
+        println("HTTP " + str(res.status) + " from " + url + " (attempt " + str(attempt) + "/2); service unavailable or request rejected");
+        exit(1);
+      }
+      return res;
+    }
+  }
+}
+
+ids = ARGV.get(0, "bitcoin,ethereum,solana");
+res = fetch_public("https://api.coingecko.com/api/v3/simple/price?ids=" + url_encode(ids) + "&vs_currencies=usd,eur");
+data = res.bodyJson;
+println("Coin | USD | EUR");
+for (id in split(ids, ",")) {
+  price = data.get(trim(id), null);
+  if (price == null) {
+    println(trim(id) + " | unavailable | unavailable");
+  } else {
+    println(trim(id) + " | " + str(price.get("usd", "n/a")) + " | " + str(price.get("eur", "n/a")));
+  }
+}

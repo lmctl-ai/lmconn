@@ -1,0 +1,59 @@
+# Chapter: Money - public exchange rates
+# Shows: ExchangeRate-API base currency, update date, and four rates via lmconn http request
+# Run: lmscript examples/free-fxrates.lms [base]
+# Needs: lmconn and node on PATH, internet access; no credentials
+# exit: 0
+
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+# lmscript has no URL-encoding builtin; pass text as one argv element to Node.
+fn url_encode(value) {
+  r = system(["node", "-e", "process.stdout.write(encodeURIComponent(process.argv[1]))", "--", value], 5000);
+  if (r.timed_out || r.code != 0) {
+    println("URL encoding failed (node must be on PATH)");
+    exit(1);
+  }
+  return r.stdout;
+}
+
+fn fetch_public(url) {
+  for (attempt in [1, 2]) {
+    r = system(["lmconn", "http", "request", url, "--timeout", "30000", "--header", "User-Agent: lmconnectors-examples/0.1 (https://github.com/lmctl-ai/lmconnectors)"], 35000);
+    if (r.timed_out) {
+      println("lmconn timed out");
+      exit(1);
+    }
+    env = json_parse(r.stdout);
+    if (!env.ok) {
+      println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+      exit(1);
+    }
+    res = env.result;
+    if (attempt == 1 && (res.status == 429 || (res.status >= 500 && res.status <= 599))) {
+      println("HTTP " + str(res.status) + ": retrying once in 3 seconds");
+      sleep_ms(3000);
+    } else {
+      if (!res.ok) {
+        println("HTTP " + str(res.status) + " from " + url + " (attempt " + str(attempt) + "/2); service unavailable or request rejected");
+        exit(1);
+      }
+      return res;
+    }
+  }
+}
+
+base = upper(ARGV.get(0, "USD"));
+res = fetch_public("https://open.er-api.com/v6/latest/" + url_encode(base));
+data = res.bodyJson;
+if (data.result != "success") {
+  println("ExchangeRate-API failed: " + str(data.get("error-type", "unknown error")));
+  exit(1);
+}
+println("Base: " + data.base_code + " | updated: " + data.time_last_update_utc);
+for (currency in ["EUR", "GBP", "JPY", "CNY"]) {
+  println(currency + ": " + str(data.rates.get(currency, "n/a")));
+}
+println("Source: https://www.exchangerate-api.com (open access rates)");
