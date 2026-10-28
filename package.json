@@ -10,7 +10,7 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "schema": "node bin/lmconn.js --cli-schema --json > schema/lmconn.cli.schema.v1.json"
   },
   "license": "MIT"
