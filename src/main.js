@@ -11,7 +11,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.0.0';
 
-const AREAS = new Set(['cred', 'llm', 'http', 'github']);
+const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth']);
 
 const USAGE = [
   'lmconn — connectors for lmscript',
@@ -23,6 +23,7 @@ const USAGE = [
   '  lmconn llm <providers|chat|probe> ...',
   '  lmconn http <request> ...',
   '  lmconn github <...> ...',
+  '  lmconn oauth <authorize|refresh|status> ...',
 ].join('\n');
 
 export async function main(argv) {
