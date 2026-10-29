@@ -206,6 +206,18 @@ map against n8n's connector categories is in
 | `free-openlibrary.lms` | openlibrary.org | three books with first author and first publication year |
 | `free-wikipedia.lms` | en.wikipedia.org REST | URL-encoded title, short article extract |
 
+## Testing
+
+`npm test` runs the full OAuth2 flow against `scripts/mock-idp.js`, a
+strict mock authorization server (RFC 6749 plus PKCE): exact redirect URI,
+one-time codes, S256 verification, header and body client authentication,
+RFC error codes, optional refresh-token rotation, and adversarial modes for
+a misbehaving provider. No network and no credentials are involved.
+`scripts/verify-n8n-oauth.mjs` runs n8n's own OAuth2 client against the
+same mock for manual cross-validation, and `examples/oauth-mock-demo.lms`
+is an end-to-end demo that needs no credentials. Details in
+[docs/oauth2.md](docs/oauth2.md#testing).
+
 ## Layout
 
 - `src/main.js` — argument router, `--cli-schema`, schema-call bridge

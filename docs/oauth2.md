@@ -153,8 +153,103 @@ those entries when verifying the OAuth path.
 Run `lmscript examples/oauth-github.lms` for the example. It skips cleanly
 until GitHub OAuth authorization is available.
 
-## Verification
+## Testing
 
-Tested end-to-end against a mock IdP in `test/oauth.test.js`; real-provider
-testing is manual. The GitHub walkthrough requires a user-created OAuth App
-and interactive consent and is not a claim of automated GitHub validation.
+OAuth2 clients are easy to test wrongly: a permissive fake server accepts
+whatever the client sends, so client and fake agree with each other and prove
+nothing. lmconn tests against `scripts/mock-idp.js`, a strict mock
+authorization server (RFC 6749 plus PKCE, RFC 7636) that is strict enough
+for n8n's own OAuth2 client to be run against it as a second implementation.
+It uses Node built-ins only and is not shipped in the compiled binary.
+
+### What the mock validates
+
+- `redirect_uri` must match one of the registered URIs exactly, both at
+  `/authorize` and again at `/token`.
+- Authorization codes are one-time and expire after 60 seconds; a reused or
+  expired code is `invalid_grant`.
+- The code is bound to the client that requested it; another client
+  exchanging it gets `invalid_grant`.
+- PKCE: `code_challenge_method` must be `S256` (`plain` only with
+  `allowPlainPkce`); the verifier must be 43 to 128 characters and hash to
+  the stored challenge; `requirePkce` turns a missing challenge into
+  `invalid_request`.
+- Client authentication per registration: `header` (HTTP Basic),
+  `body` (form fields) or `both`; the wrong style, an unknown client or a
+  bad secret is `invalid_client` with HTTP 401. Secrets compare in constant
+  time.
+- RFC 6749 error bodies: `invalid_request`, `invalid_client`,
+  `invalid_grant`, `unsupported_grant_type`, `unsupported_response_type`
+  (the last one bounced to the redirect URI with the original `state`).
+- Refresh: `grant_type=refresh_token` with the stored client; with
+  `rotateRefreshTokens` the old refresh token is revoked and a new one
+  issued, otherwise the response repeats the old one, which is what most
+  providers do and what the client must handle in both forms.
+- Token responses are JSON by default or form-encoded with
+  `formEncodedTokenResponse` (GitHub's default).
+- `/api/userinfo` requires a valid Bearer token and answers 401 with a
+  `WWW-Authenticate` header otherwise, so `http request --auth` can be
+  exercised end to end.
+- `idp.log` records every request as `{method, path, params, authStyle}`
+  with codes, refresh tokens and secrets redacted, so tests can assert on
+  what the client sent without ever holding a secret.
+
+There is no consent page: `/authorize` validates and redirects at once.
+That is what makes the flow runnable without a browser.
+
+### Three roles
+
+1. **Unit-test oracle**: `test/oauth.test.js` starts one mock per test on an
+   ephemeral port, registers a client with the loopback redirect URI, runs
+   `oauth authorize`, `refresh` and `status` through `run()` and asserts on
+   the stored `oauth_*` fields, the envelopes and `idp.log`. It covers S256
+   verification, state mismatch, body-style client auth, form-encoded token
+   responses, retained refresh tokens, `invalid_grant` to `RECONNECT`,
+   `--manual`, `--no-pkce`, timeouts and secret-free error messages.
+2. **Adversarial oracle**: `test/oauth-adversarial.test.js` uses the
+   `misbehave` modes to check that lmconn fails safely when the provider is
+   wrong: `bad-state` (the redirect carries a tampered `state`, the client
+   must refuse to exchange the code), `bad-json` (a truncated token body
+   must be a clean error, not a crash) and `string-expires` (`expires_in`
+   as a string, which real providers do send, must still produce a valid
+   `oauth_expires_at`). Rotation and plain-PKCE options cover the remaining
+   provider variations.
+3. **Cross-validation target for n8n**: `scripts/verify-n8n-oauth.mjs`
+   drives n8n's own OAuth2 client (the installed `n8n` package) against the
+   same mock, with the mock's demo client registered for n8n's callback
+   `http://localhost:5678/rest/oauth2-credential/callback`. If n8n's client
+   completes the flow and lmconn's client completes the flow against the
+   same server, the two implementations agree with the mock independently,
+   which is the evidence a self-written fake cannot give. This is a manual
+   script, not part of `npm test`: it needs the n8n package on the machine
+   and takes seconds to minutes. Check the header comment of the script for
+   its current status; at the time of writing it was being built in
+   parallel with this page and had not yet landed on master.
+
+### Zero-credential demo
+
+`examples/oauth-mock-demo.lms` runs the whole thing from lmscript with no
+real credentials: start the mock standalone, authorize, inspect status,
+call `/api/userinfo` through `http request --auth`, refresh, and shut the
+mock down.
+
+```sh
+node scripts/mock-idp.js --port 5556 --once   # demo-client / demo-secret, exits 3 s after the first grant
+lmconn oauth authorize mockdemo --client-id demo-client --client-secret demo-secret \
+  --auth-url http://127.0.0.1:5556/authorize --token-url http://127.0.0.1:5556/token \
+  --scope demo --port 5558
+lmconn http request http://127.0.0.1:5556/api/userinfo --auth mockdemo
+```
+
+Because the mock redirects without a consent page, the authorize URL
+printed to stderr can be followed by any HTTP client instead of a browser;
+the demo does exactly that so it runs unattended.
+
+### What stays manual
+
+Real providers need a browser login, a per-person client registration and
+account state that CI cannot own. The GitHub walkthrough above is therefore
+a documented procedure, not an automated claim. The mock covers the
+protocol; the presets in `src/oauth-presets.json` carry the per-provider
+endpoints and quirks; the remaining risk is a provider deviating from both,
+which only a manual run against that provider reveals.
