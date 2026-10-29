@@ -2,7 +2,10 @@
 
 n8n ships 400+ connector nodes. lmconn is one CLI with five command areas.
 This page states honestly what is covered today, what the generic path
-covers, and what is missing. Status as of 2026-10-28.
+covers, and what is missing. Status as of 2026-10-28. For the per-service
+denominator mined from the installed n8n package, see
+[n8n-connector-matrix.md](n8n-connector-matrix.md) (regenerate with
+`node scripts/n8n-coverage-matrix.mjs`).
 
 ## Categories
 
