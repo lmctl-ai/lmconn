@@ -33,8 +33,11 @@ check('--version', r.status === 0 && r.envelope?.ok && r.envelope.result.version
 
 r = run(['--cli-schema', '--json']);
 const ops = r.envelope?.operations ?? (() => { try { return JSON.parse(r.stdout).operations; } catch { return null; } })();
-check('--cli-schema lists 11 operations', r.status === 0 && Array.isArray(ops) && ops.length === 11,
+check('--cli-schema lists 14 operations', r.status === 0 && Array.isArray(ops) && ops.length === 14,
   `got ${ops?.length}`);
+const opNames = new Set((ops ?? []).map((o) => o.name));
+check('--cli-schema lists the oauth ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status'].every((n) => opNames.has(n)),
+  `names=${[...opNames].filter((n) => n.startsWith('oauth_')).join(',') || 'none'}`);
 
 r = run(['cred', 'set', 'smoke', 'api_key', '--stdin'], 'smoke-token-123');
 check('cred set (stdin)', r.status === 0 && r.envelope?.ok === true, r.stdout.slice(0, 200));
@@ -51,6 +54,16 @@ check('cred delete', r.status === 0 && r.envelope?.result?.deleted === true);
 r = run(['llm', 'providers']);
 check('llm providers lists 7', r.status === 0 && Array.isArray(r.envelope?.result) && r.envelope.result.length === 7,
   `got ${r.envelope?.result?.length}`);
+
+r = run(['oauth', 'status', 'not-a-service']);
+// status is read-only: an unknown service is a clean envelope, either ok:true with authorized:false
+// (pinned design) or ok:false with an error code and a nonzero exit; never a crash, never a token.
+check('oauth status on an unknown service is a clean envelope',
+  (r.status === 0 && r.envelope?.ok === true && r.envelope.result?.authorized === false && r.envelope.result?.service === 'not-a-service') ||
+  (r.status !== 0 && r.envelope?.ok === false && typeof r.envelope?.error?.code === 'string'),
+  `status=${r.status} stdout=${r.stdout.slice(0, 200)}`);
+check('oauth status prints nothing secret-shaped', !/(access|refresh)_token"\s*:\s*"[^"]+|Bearer\s+\S+|ya29\.|gho_|ghp_/i.test(r.stdout),
+  r.stdout.slice(0, 200));
 
 r = run(['bogus-area']);
 check('unknown area exits 2 with USAGE', r.status === 2 && r.envelope?.error?.code === 'USAGE', `status=${r.status}`);

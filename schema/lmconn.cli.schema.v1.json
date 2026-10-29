@@ -221,7 +221,7 @@
           "name": "auth",
           "type": "string",
           "occurs": "?",
-          "description": "Credential service whose api_key is sent as Authorization: Bearer"
+          "description": "Credential service whose API key or OAuth access token is sent as Authorization: Bearer"
         },
         {
           "name": "timeout",
@@ -255,6 +255,113 @@
           "occurs": "?",
           "default": 30,
           "description": "Maximum number of names (1..1000)"
+        }
+      ]
+    },
+    {
+      "name": "oauth_authorize",
+      "access": "write",
+      "description": "Authorize with a loopback callback and PKCE",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "positional": true,
+          "description": "Credential service name"
+        },
+        {
+          "name": "clientId",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_client_id"
+        },
+        {
+          "name": "clientSecret",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_client_secret"
+        },
+        {
+          "name": "authUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_auth_url"
+        },
+        {
+          "name": "tokenUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_token_url"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_scope"
+        },
+        {
+          "name": "authQuery",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_auth_query"
+        },
+        {
+          "name": "authStyle",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_auth_style"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 0,
+          "description": "Loopback port (0 chooses an ephemeral port)"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 300000,
+          "description": "Authorization deadline in milliseconds"
+        },
+        {
+          "name": "noPkce",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Disable PKCE for legacy providers"
+        },
+        {
+          "name": "manual",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Read a full redirect URL from stdin"
+        }
+      ]
+    },
+    {
+      "name": "oauth_refresh",
+      "access": "write",
+      "description": "Refresh stored OAuth credentials",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "positional": true,
+          "description": "Credential service name"
+        }
+      ]
+    },
+    {
+      "name": "oauth_status",
+      "access": "read",
+      "description": "Show OAuth status without tokens",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "positional": true,
+          "description": "Credential service name"
         }
       ]
     }
