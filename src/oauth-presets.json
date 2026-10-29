@@ -1,0 +1,527 @@
+{
+  "acuity-scheduling": {
+    "auth_url": "https://acuityscheduling.com/oauth2/authorize",
+    "token_url": "https://acuityscheduling.com/oauth2/token",
+    "scope": "api-v1",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "AcuityScheduling OAuth2 API"
+  },
+  "airtable": {
+    "auth_url": "https://airtable.com/oauth2/v1/authorize",
+    "token_url": "https://airtable.com/oauth2/v1/token",
+    "scope": "schema.bases:read data.records:read data.records:write",
+    "grant_type": "pkce",
+    "auth_style": "header",
+    "display_name": "Airtable OAuth2 API"
+  },
+  "asana": {
+    "auth_url": "https://app.asana.com/-/oauth_authorize",
+    "token_url": "https://app.asana.com/-/oauth_token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Asana OAuth2 API"
+  },
+  "atlassian": {
+    "auth_url": "https://auth.atlassian.com/authorize",
+    "token_url": "https://auth.atlassian.com/oauth/token",
+    "auth_query": "audience=api.atlassian.com&prompt=consent",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Atlassian OAuth2 API"
+  },
+  "beeminder": {
+    "auth_url": "https://www.beeminder.com/apps/authorize",
+    "token_url": "https://www.beeminder.com/apps/authorize",
+    "auth_query": "response_type=token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Beeminder OAuth2 API"
+  },
+  "bitly": {
+    "auth_url": "https://bitly.com/oauth/authorize",
+    "token_url": "https://api-ssl.bitly.com/oauth/access_token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Bitly OAuth2 API"
+  },
+  "box": {
+    "auth_url": "https://account.box.com/api/oauth2/authorize",
+    "token_url": "https://api.box.com/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Box OAuth2 API"
+  },
+  "calendly": {
+    "auth_url": "https://auth.calendly.com/oauth/authorize",
+    "token_url": "https://auth.calendly.com/oauth/token",
+    "scope": "users:read webhooks:read webhooks:write scheduled_events:read",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Calendly OAuth2 API"
+  },
+  "cisco-webex": {
+    "auth_url": "https://webexapis.com/v1/authorize",
+    "token_url": "https://webexapis.com/v1/access_token",
+    "scope": "spark:memberships_read meeting:recordings_read spark:kms meeting:schedules_read spark:rooms_read spark:messages_write spark:memberships_write meeting:recordings_write meeting:preferences_read spark:messages_read meeting:schedules_write",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Cisco Webex OAuth2 API"
+  },
+  "click-up": {
+    "auth_url": "https://app.clickup.com/api",
+    "token_url": "https://api.clickup.com/api/v2/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "ClickUp OAuth2 API"
+  },
+  "discord": {
+    "auth_url": "https://discord.com/api/oauth2/authorize",
+    "token_url": "https://discord.com/api/oauth2/token",
+    "auth_query": "permissions=1642758929655",
+    "grant_type": "authorizationCode",
+    "display_name": "Discord OAuth2 API"
+  },
+  "drift": {
+    "auth_url": "https://dev.drift.com/authorize",
+    "token_url": "https://driftapi.com/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Drift OAuth2 API"
+  },
+  "dropbox": {
+    "auth_url": "https://www.dropbox.com/oauth2/authorize",
+    "token_url": "https://api.dropboxapi.com/oauth2/token",
+    "scope": "files.content.write files.content.read sharing.read account_info.read",
+    "auth_query": "token_access_type=offline&force_reapprove=true",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Dropbox OAuth2 API"
+  },
+  "eventbrite": {
+    "auth_url": "https://www.eventbrite.com/oauth/authorize",
+    "token_url": "https://www.eventbrite.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Eventbrite OAuth2 API"
+  },
+  "facebook-graph-api": {
+    "auth_url": "https://www.facebook.com/v25.0/dialog/oauth",
+    "token_url": "https://graph.facebook.com/v25.0/oauth/access_token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Facebook Graph OAuth2 API"
+  },
+  "facebook-lead-ads": {
+    "auth_url": "https://www.facebook.com/v17.0/dialog/oauth",
+    "token_url": "https://graph.facebook.com/v17.0/oauth/access_token",
+    "scope": "leads_retrieval pages_show_list pages_manage_metadata pages_manage_ads business_management pages_read_engagement",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Facebook Lead Ads OAuth2 API"
+  },
+  "figma": {
+    "auth_url": "https://www.figma.com/oauth",
+    "token_url": "https://api.figma.com/v1/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Figma OAuth2 API"
+  },
+  "formstack": {
+    "auth_url": "https://www.formstack.com/api/v2/oauth2/authorize",
+    "token_url": "https://www.formstack.com/api/v2/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Formstack OAuth2 API"
+  },
+  "get-response": {
+    "auth_url": "https://app.getresponse.com/oauth2_authorize.html",
+    "token_url": "https://api.getresponse.com/v3/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "GetResponse OAuth2 API"
+  },
+  "github": {
+    "auth_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "scope": "repo,admin:repo_hook,admin:org,admin:org_hook,gist,notifications,user,write:packages,read:packages,delete:packages,workflow",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "GitHub OAuth2 API"
+  },
+  "go-to-webinar": {
+    "auth_url": "https://api.getgo.com/oauth/v2/authorize",
+    "token_url": "https://api.getgo.com/oauth/v2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "GoToWebinar OAuth2 API"
+  },
+  "gong": {
+    "auth_url": "https://app.gong.io/oauth2/authorize",
+    "token_url": "https://app.gong.io/oauth2/generate-customer-token",
+    "scope": "api:calls:read:transcript api:provisioning:read api:workspaces:read api:meetings:user:delete api:crm:get-objects api:data-privacy:delete api:crm:schema api:flows:write api:crm:upload api:meetings:integration:status api:calls:read:extensive api:meetings:user:update api:integration-settings:write api:settings:scorecards:read api:stats:scorecards api:stats:interaction api:stats:user-actions api:crm:integration:delete api:calls:read:basic api:calls:read:media-url api:digital-interactions:write api:crm:integrations:read api:library:read api:data-privacy:read api:users:read api:logs:read api:calls:create api:meetings:user:create api:stats:user-actions:detailed api:settings:trackers:read api:crm:integration:register api:provisioning:read-write api:engagement-data:write api:permission-profile:read api:permission-profile:write api:flows:read api:crm-calls:manual-association:read",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Gong OAuth2 API"
+  },
+  "google": {
+    "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+    "token_url": "https://oauth2.googleapis.com/token",
+    "auth_query": "access_type=offline&prompt=consent",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Google OAuth2 API"
+  },
+  "gumroad": {
+    "auth_url": "https://gumroad.com/oauth/authorize",
+    "token_url": "https://gumroad.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Gumroad OAuth2 API"
+  },
+  "harvest": {
+    "auth_url": "https://id.getharvest.com/oauth2/authorize",
+    "token_url": "https://id.getharvest.com/api/v2/oauth2/token",
+    "scope": "all",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Harvest OAuth2 API"
+  },
+  "help-scout": {
+    "auth_url": "https://secure.helpscout.net/authentication/authorizeClientApplication",
+    "token_url": "https://api.helpscout.net/v2/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "HelpScout OAuth2 API"
+  },
+  "high-level": {
+    "auth_url": "https://marketplace.leadconnectorhq.com/oauth/chooselocation",
+    "token_url": "https://services.leadconnectorhq.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "HighLevel OAuth2 API"
+  },
+  "hubspot": {
+    "auth_url": "https://app.hubspot.com/oauth/authorize",
+    "token_url": "https://api.hubapi.com/oauth/v1/token",
+    "scope": "crm.lists.write crm.objects.contacts.read crm.objects.contacts.write crm.objects.companies.read crm.objects.companies.write crm.objects.deals.read crm.objects.deals.write crm.objects.owners.read crm.schemas.companies.read crm.schemas.contacts.read crm.schemas.deals.read forms tickets",
+    "auth_query": "grant_type=authorization_code",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "HubSpot OAuth2 API"
+  },
+  "keap": {
+    "auth_url": "https://signin.infusionsoft.com/app/oauth/authorize",
+    "token_url": "https://api.infusionsoft.com/token",
+    "scope": "full",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Keap OAuth2 API"
+  },
+  "line-notify": {
+    "auth_url": "https://notify-bot.line.me/oauth/authorize",
+    "token_url": "https://notify-bot.line.me/oauth/token",
+    "scope": "notify",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Line Notify OAuth2 API"
+  },
+  "linear": {
+    "auth_url": "https://linear.app/oauth/authorize",
+    "token_url": "https://api.linear.app/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Linear OAuth2 API"
+  },
+  "linked-in": {
+    "auth_url": "https://www.linkedin.com/oauth/v2/authorization",
+    "token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+    "scope": "=w_member_social{{ $self[\"organizationSupport\"] === true ? \",w_organization_social\" : \"\" }}{{ $self[\"legacy\"] === true ? \",r_liteprofile,r_emailaddress\" : \",profile,email,openid\" }}",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "LinkedIn OAuth2 API"
+  },
+  "linked-in-community-management": {
+    "auth_url": "https://www.linkedin.com/oauth/v2/authorization",
+    "token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+    "scope": "w_member_social w_organization_social r_basicprofile",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "LinkedIn Community Management OAuth2 API"
+  },
+  "mailchimp": {
+    "auth_url": "https://login.mailchimp.com/oauth2/authorize",
+    "token_url": "https://login.mailchimp.com/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Mailchimp OAuth2 API"
+  },
+  "medium": {
+    "auth_url": "https://medium.com/m/oauth/authorize",
+    "token_url": "https://medium.com/v1/tokens",
+    "scope": "basicProfile,publishPost,listPublications",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Medium OAuth2 API"
+  },
+  "microsoft": {
+    "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    "auth_query": "response_mode=query&prompt=select_account",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Microsoft OAuth2 API"
+  },
+  "microsoft-azure-monitor": {
+    "auth_url": "=https://login.microsoftonline.com/{{$self[\"tenantId\"]}}/oauth2/authorize",
+    "token_url": "=https://login.microsoftonline.com/{{$self[\"tenantId\"]}}/oauth2/{{$self[\"grantType\"] === \"clientCredentials\" ? \"v2.0/\" : \"\"}}token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Microsoft Azure Monitor OAuth2 API"
+  },
+  "microsoft-teams-manager": {
+    "auth_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+    "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+    "scope": "openid profile offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Application.ReadWrite.All https://graph.microsoft.com/AppCatalog.ReadWrite.All https://graph.microsoft.com/AppCatalog.Submit",
+    "auth_query": "response_mode=query&prompt=select_account",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Microsoft Teams Manager OAuth2 API"
+  },
+  "miro": {
+    "auth_url": "https://miro.com/oauth/authorize",
+    "token_url": "https://api.miro.com/v1/oauth/token",
+    "scope": "boards:read boards:write",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Miro OAuth2 API"
+  },
+  "monday-com": {
+    "auth_url": "https://auth.monday.com/oauth2/authorize",
+    "token_url": "https://auth.monday.com/oauth2/token",
+    "scope": "boards:write boards:read",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Monday.com OAuth2 API"
+  },
+  "next-cloud": {
+    "auth_url": "https://nextcloud.example.com/apps/oauth2/authorize",
+    "token_url": "https://nextcloud.example.com/apps/oauth2/api/v1/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "NextCloud OAuth2 API"
+  },
+  "notion": {
+    "auth_url": "https://api.notion.com/v1/oauth/authorize",
+    "token_url": "https://api.notion.com/v1/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Notion OAuth2 API"
+  },
+  "pager-duty": {
+    "auth_url": "https://app.pagerduty.com/oauth/authorize",
+    "token_url": "https://app.pagerduty.com/oauth/token",
+    "scope": "write",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "PagerDuty OAuth2 API"
+  },
+  "philips-hue": {
+    "auth_url": "https://api.meethue.com/v2/oauth2/authorize",
+    "token_url": "https://api.meethue.com/v2/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "PhilipHue OAuth2 API"
+  },
+  "pipedrive": {
+    "auth_url": "https://oauth.pipedrive.com/oauth/authorize",
+    "token_url": "https://oauth.pipedrive.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Pipedrive OAuth2 API"
+  },
+  "pushbullet": {
+    "auth_url": "https://www.pushbullet.com/authorize",
+    "token_url": "https://api.pushbullet.com/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Pushbullet OAuth2 API"
+  },
+  "quick-books": {
+    "auth_url": "https://appcenter.intuit.com/connect/oauth2",
+    "token_url": "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+    "scope": "com.intuit.quickbooks.accounting",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "QuickBooks Online OAuth2 API"
+  },
+  "raindrop": {
+    "auth_url": "https://raindrop.io/oauth/authorize",
+    "token_url": "https://api.raindrop.io/v1/oauth/access_token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Raindrop OAuth2 API"
+  },
+  "reddit": {
+    "auth_url": "https://www.reddit.com/api/v1/authorize",
+    "token_url": "https://www.reddit.com/api/v1/access_token",
+    "scope": "identity edit history mysubreddits read save submit",
+    "auth_query": "duration=permanent",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Reddit OAuth2 API"
+  },
+  "sentry-io": {
+    "auth_url": "https://sentry.io/oauth/authorize/",
+    "token_url": "https://sentry.io/oauth/token/",
+    "scope": "event:admin event:read org:read project:read project:releases team:read event:write org:admin project:write team:write project:admin team:admin",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Sentry.io OAuth2 API"
+  },
+  "service-now": {
+    "auth_url": "=https://{{$self[\"subdomain\"]}}.service-now.com/oauth_auth.do",
+    "token_url": "=https://{{$self[\"subdomain\"]}}.service-now.com/oauth_token.do",
+    "scope": "useraccount",
+    "auth_query": "grant_type=authorization_code",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "ServiceNow OAuth2 API"
+  },
+  "shopify": {
+    "auth_url": "=https://{{$self[\"shopSubdomain\"]}}.myshopify.com/admin/oauth/authorize",
+    "token_url": "=https://{{$self[\"shopSubdomain\"]}}.myshopify.com/admin/oauth/access_token",
+    "scope": "write_orders read_orders write_products read_products",
+    "auth_query": "access_mode=value",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Shopify OAuth2 API"
+  },
+  "slack": {
+    "auth_url": "https://slack.com/oauth/v2/authorize",
+    "token_url": "https://slack.com/api/oauth.v2.access",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Slack OAuth2 API"
+  },
+  "slack-manager": {
+    "auth_url": "https://slack.com/oauth/v2/authorize",
+    "token_url": "https://slack.com/api/oauth.v2.access",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Slack Manager OAuth2 API"
+  },
+  "snowflake": {
+    "auth_url": "=https://{{$self[\"account\"]}}.snowflakecomputing.com/oauth/authorize",
+    "token_url": "=https://{{$self[\"account\"]}}.snowflakecomputing.com/oauth/token-request",
+    "grant_type": "pkce",
+    "auth_style": "header",
+    "display_name": "Snowflake OAuth2 API"
+  },
+  "spotify": {
+    "auth_url": "https://accounts.spotify.com/authorize",
+    "token_url": "https://accounts.spotify.com/api/token",
+    "scope": "user-read-playback-state playlist-read-collaborative user-modify-playback-state playlist-modify-public user-read-currently-playing playlist-read-private user-read-recently-played playlist-modify-private user-library-read user-follow-read",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Spotify OAuth2 API"
+  },
+  "strava": {
+    "auth_url": "https://www.strava.com/oauth/authorize",
+    "token_url": "https://www.strava.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Strava OAuth2 API"
+  },
+  "supabase": {
+    "auth_url": "https://api.supabase.com/v1/oauth/authorize",
+    "token_url": "https://api.supabase.com/v1/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Supabase OAuth2 API"
+  },
+  "survey-monkey": {
+    "auth_url": "https://api.surveymonkey.com/oauth/authorize",
+    "token_url": "https://api.surveymonkey.com/oauth/token",
+    "scope": "surveys_read,collectors_read,responses_read,responses_read_detail,webhooks_write,webhooks_read",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "SurveyMonkey OAuth2 API"
+  },
+  "todoist": {
+    "auth_url": "https://todoist.com/oauth/authorize",
+    "token_url": "https://todoist.com/oauth/access_token",
+    "scope": "data:read_write,data:delete",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Todoist OAuth2 API"
+  },
+  "twist": {
+    "auth_url": "https://twist.com/oauth/authorize",
+    "token_url": "https://twist.com/oauth/access_token",
+    "scope": "attachments:write,channels:remove,comments:remove,messages:remove,threads:remove,workspaces:read",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Twist OAuth2 API"
+  },
+  "twitter": {
+    "auth_url": "https://x.com/i/oauth2/authorize",
+    "token_url": "https://api.x.com/2/oauth2/token",
+    "scope": "tweet.read users.read tweet.write tweet.moderate.write users.read follows.read follows.write offline.access like.read like.write dm.write dm.read list.read list.write",
+    "grant_type": "pkce",
+    "auth_style": "header",
+    "display_name": "X OAuth2 API"
+  },
+  "typeform": {
+    "auth_url": "https://api.typeform.com/oauth/authorize",
+    "token_url": "https://api.typeform.com/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Typeform OAuth2 API"
+  },
+  "webflow": {
+    "auth_url": "https://webflow.com/oauth/authorize",
+    "token_url": "https://api.webflow.com/oauth/access_token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Webflow OAuth2 API"
+  },
+  "wordpress": {
+    "auth_url": "https://public-api.wordpress.com/oauth2/authorize",
+    "token_url": "https://public-api.wordpress.com/oauth2/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "WordPress OAuth2 API"
+  },
+  "xero": {
+    "auth_url": "https://login.xero.com/identity/connect/authorize",
+    "token_url": "https://identity.xero.com/connect/token",
+    "scope": "offline_access accounting.invoices accounting.payments accounting.banktransactions accounting.manualjournals accounting.attachments accounting.settings accounting.contacts",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Xero OAuth2 API"
+  },
+  "zendesk": {
+    "auth_url": "=https://{{$self[\"subdomain\"]}}.zendesk.com/oauth/authorizations/new",
+    "token_url": "=https://{{$self[\"subdomain\"]}}.zendesk.com/oauth/tokens",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Zendesk OAuth2 API"
+  },
+  "zoho": {
+    "auth_url": "https://accounts.zoho.com/oauth/v2/auth",
+    "token_url": "https://accounts.zoho.com/oauth/v2/token",
+    "scope": "ZohoCRM.modules.ALL,ZohoCRM.settings.all,ZohoCRM.users.all",
+    "auth_query": "access_type=offline",
+    "grant_type": "authorizationCode",
+    "auth_style": "body",
+    "display_name": "Zoho OAuth2 API"
+  },
+  "zoom": {
+    "auth_url": "https://zoom.us/oauth/authorize",
+    "token_url": "https://zoom.us/oauth/token",
+    "grant_type": "authorizationCode",
+    "auth_style": "header",
+    "display_name": "Zoom OAuth2 API"
+  }
+}
