@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmmock",
-  "commit": "1d579b5ba319134181b7428471ce22e1417861bd",
+  "commit": "74d3ca672e8d3fc0cc49b598daa2bdfc70ebe156",
   "sha256": {
     "schema.json": "a7654e6cb25fb2c56d36a441adb0016db63d7fd466cdcdc32d11d588f4233ff4",
     "oauth.lms": "efb0a3d9e460d2614b8b6f915c7ed0c79d06514f021fef4bf77f8ade1eeee1c2",
@@ -29,6 +29,12 @@
     "asana-client.json": "d3c3e7f8c892f23f607f20d149f7e0635e81ba5b2d7d25d4fd222cf87eb8946c",
     "trello.lms": "6513de524f531e9b7957285c33b24271acd74eb681e49692befa6f5b52eff22f",
     "trello-client.json": "5c6f99cf23d7e97f433d974ad85cb65dbd9cac301894a8c53fa6f6c0c578935f",
+    "shopify.lms": "55f828cf83fa3ef0a42314a041b6d1e7371817a2ad77a144b0552111adc9a737",
+    "shopify-client.json": "9eb42280d58f01a0c18b908f22a5decd18a504aaa34b3036a6453d2e7bdf526b",
+    "wordpress.lms": "a2763827e6a64355a9222ece76cf3a3b416487d0200a091dfe332bddc0ca13a1",
+    "wordpress-client.json": "dafe38b7c279843c255bcce4152b5dc0fb752b1fb20dfe8426645143d10d5e67",
+    "woocommerce.lms": "e7dfdde7fda577ecf6b5fcfe4628611d89a29eba70b87e0c19aa93f6f72bc282",
+    "woocommerce-client.json": "d40e8e06149104fcde8a80c0d699a06689ee92ee3ee792786e65053f353dcaa1",
     "pagerduty.lms": "85e89ae32ce123982626900ee163ed1721ba5be43d0cf00cc2d918e0ed015abf",
     "pagerduty-client.json": "33bfaae59d35f9eb486566fd04533e283ff6e88807acb11f69c417193d886958",
     "datadog.lms": "bf9f1d93297b4f321528d4f6669f36c147276eaf3b0dcb4c7830b2b225cf5bda",

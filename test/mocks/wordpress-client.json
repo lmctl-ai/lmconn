@@ -1,0 +1,112 @@
+{
+  "steps": [
+    {
+      "name": "credential test endpoint",
+      "path": "/wp-json/wp/v2/users",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "0.id": 1
+      }
+    },
+    {
+      "name": "first page",
+      "path": "/wp-json/wp/v2/posts",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "0.id": 1
+      }
+    },
+    {
+      "name": "last page",
+      "path": "/wp-json/wp/v2/posts?page=2",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "0.id": 2
+      }
+    },
+    {
+      "name": "create",
+      "path": "/wp-json/wp/v2/posts",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "method": "POST",
+      "body": {
+        "title": "Created \"fixture\" 世界"
+      },
+      "status": 201,
+      "capture": {
+        "id": "id"
+      },
+      "json": {
+        "title.rendered": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/wp-json/wp/v2/posts/${id}",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "title.rendered": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/wp-json/wp/v2/posts/999",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "status": 404,
+      "json": {
+        "code": "rest_post_invalid_id",
+        "message": "Invalid post ID.",
+        "data.status": 404
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/wp-json/wp/v2/users",
+      "status": 401,
+      "json": {
+        "code": "rest_not_logged_in",
+        "message": "You are not currently logged in.",
+        "data.status": 401
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/wp-json/wp/v2/users",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOndyb25n"
+      },
+      "status": 401,
+      "json": {
+        "code": "incorrect_password",
+        "message": "The provided password is an invalid application password.",
+        "data.status": 401
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/wp-json/wp/v2/users",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ=",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "code": "internal_server_error",
+        "message": "Fixture server failure",
+        "data.status": 500
+      }
+    }
+  ]
+}

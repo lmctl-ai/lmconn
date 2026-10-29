@@ -1,0 +1,139 @@
+{
+  "steps": [
+    {
+      "name": "credential test endpoint",
+      "path": "/wp-json/wc/v3/products/categories",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "json": {
+        "0.id": 1
+      }
+    },
+    {
+      "name": "first page",
+      "path": "/wp-json/wc/v3/products",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "json": {
+        "0.id": 1
+      }
+    },
+    {
+      "name": "last page",
+      "path": "/wp-json/wc/v3/products?page=2",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "json": {
+        "0.id": 2
+      }
+    },
+    {
+      "name": "create",
+      "path": "/wp-json/wc/v3/products",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "method": "POST",
+      "body": {
+        "name": "Created \"fixture\" 世界"
+      },
+      "status": 201,
+      "capture": {
+        "id": "id"
+      },
+      "json": {
+        "name": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/wp-json/wc/v3/products/${id}",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "json": {
+        "name": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/wp-json/wc/v3/products/999",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl"
+      },
+      "status": 404,
+      "json": {
+        "code": "woocommerce_rest_product_invalid_id",
+        "message": "Invalid ID.",
+        "data.status": 404
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/wp-json/wc/v3/products/categories",
+      "status": 401,
+      "json": {
+        "code": "woocommerce_rest_cannot_view",
+        "message": "Sorry, you cannot list resources.",
+        "data.status": 401
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/wp-json/wc/v3/products/categories",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTp3cm9uZw=="
+      },
+      "status": 401,
+      "json": {
+        "code": "woocommerce_rest_authentication_error",
+        "message": "Consumer secret is invalid.",
+        "data.status": 401
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/wp-json/wc/v3/products/categories",
+      "headers": {
+        "Authorization": "Basic Y2tfZml4dHVyZTpjc19maXh0dXJl",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "code": "internal_server_error",
+        "message": "Fixture server failure",
+        "data.status": 500
+      }
+    },
+    {
+      "name": "query credentials",
+      "path": "/wp-json/wc/v3/products/categories?consumer_key=ck_fixture&consumer_secret=cs_fixture",
+      "json": {
+        "0.id": 1
+      }
+    },
+    {
+      "name": "wrong query secret",
+      "path": "/wp-json/wc/v3/products/categories?consumer_key=ck_fixture&consumer_secret=wrong",
+      "status": 401,
+      "json": {
+        "code": "woocommerce_rest_authentication_error",
+        "message": "Consumer secret is invalid.",
+        "data.status": 401
+      }
+    },
+    {
+      "name": "query credentials take precedence over Basic",
+      "path": "/wp-json/wc/v3/products/categories?consumer_key=ck_fixture&consumer_secret=cs_fixture",
+      "headers": {
+        "Authorization": "Basic d3Jvbmc6d3Jvbmc="
+      },
+      "json": {
+        "0.id": 1
+      }
+    }
+  ]
+}

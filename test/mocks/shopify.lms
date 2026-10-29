@@ -1,0 +1,42 @@
+# shopify selected n8n REST contracts. Dummy credentials only.
+# Fixed two-page snapshots; create/read state is independent of listing.
+p = _lmcode_ schema="schema.json";
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config());
+ let token = "fixture-token"; if (c.has("token")) { token = c.get("token").as_string(); }
+ let present = x.header("X-Shopify-Access-Token") != "";
+ let ok = secure_equal(x.header("X-Shopify-Access-Token"),token);
+ if (!ok) { if (!present) { x.status(401); x.json("{\"errors\":\"[API] Invalid API key or access token (unrecognized login or wrong password)\"}"); } else { x.status(401); x.json("{\"errors\":\"[API] Invalid API key or access token (unrecognized login or wrong password)\"}"); } }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"errors\":\"An unexpected error occurred\"}"); }
+ return ok;
+}
+@list_items
+fn list_items(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ if (x.query("page_info") == "page2") {
+ x.set_header("Link", "<http://" + x.header("Host") + "/admin/api/2024-07/products.json?page_info=page1>; rel=\"prev\"");
+ x.json("{\"products\":[{\"id\":2,\"title\":\"Second fixture\",\"status\":\"active\"}]}");
+ } else {
+ x.set_header("Link", "<http://" + x.header("Host") + "/admin/api/2024-07/products.json?page_info=page2>; rel=\"next\"");
+ x.json("{\"products\":[{\"id\":1,\"title\":\"First fixture\",\"status\":\"active\"}]}");
+ }
+} }
+@create_item
+fn create_item(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ let b = json_parse(x.body());
+ b = b.get("product");
+ let title = ""; if (b.has("title")) { title = b.get("title").as_string(); }
+ let id = str(100 + x.increment("ids"));
+ let item = "{\"id\":" + id + ",\"title\":" + json_quote(title) + ",\"status\":\"active\"}";
+ x.set("item:" + id + ".json",item); x.status(201);
+ x.json("{\"product\":" + item + "}");
+} }
+@get_item
+fn get_item(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ let item = x.get("item:" + x.param("id"));
+ if (item == "") { x.status(404); x.json("{\"errors\":\"Not Found\"}"); } else { x.json("{\"product\":" + item + "}"); }
+} }
+route("GET","/admin/api/2024-07/products.json","list_items");
+route("POST","/admin/api/2024-07/products.json","create_item");
+route("GET","/admin/api/2024-07/products/{id}","get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);

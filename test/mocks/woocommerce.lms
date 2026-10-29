@@ -1,0 +1,50 @@
+# woocommerce selected n8n REST contracts. Dummy credentials only.
+# Fixed two-page snapshots; create/read state is independent of listing.
+p = _lmcode_ schema="schema.json";
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config());
+ let user = "ck_fixture"; let secret = "cs_fixture";
+ if (c.has("consumerKey")) { user = c.get("consumerKey").as_string(); }
+ if (c.has("consumerSecret")) { secret = c.get("consumerSecret").as_string(); }
+ let auth = x.header("Authorization");
+ let suppliedUser = basic_id(auth); let suppliedSecret = basic_secret(auth);
+ let present = auth != "";
+ let validStyle = str_starts_with(auth,"Basic ");
+ if (x.query("consumer_key") != "" && x.query("consumer_secret") != "") { suppliedUser = x.query("consumer_key"); suppliedSecret = x.query("consumer_secret"); present = true; validStyle = true; }
+ let ok = validStyle && secure_equal(suppliedUser,user) && secure_equal(suppliedSecret,secret);
+ if (!ok) { if (!present || suppliedUser != user || suppliedSecret == "") { x.status(401); x.json("{\"code\":\"woocommerce_rest_cannot_view\",\"message\":\"Sorry, you cannot list resources.\",\"data\":{\"status\":401}}"); } else { x.status(401); x.json("{\"code\":\"woocommerce_rest_authentication_error\",\"message\":\"Consumer secret is invalid.\",\"data\":{\"status\":401}}"); } }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"code\":\"internal_server_error\",\"message\":\"Fixture server failure\",\"data\":{\"status\":500}}"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("[{\"id\":1,\"name\":\"Fixtures\",\"slug\":\"fixtures\",\"count\":2}]"); } }
+@list_items
+fn list_items(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ if (x.query("page") == "2") {
+ x.set_header("Link", "<http://" + x.header("Host") + "/wp-json/wc/v3/products?page=1>; rel=\"prev\"");
+ x.json("[{\"id\":2,\"name\":\"Second fixture\",\"type\":\"simple\",\"status\":\"publish\",\"price\":\"12.00\",\"stock_status\":\"instock\"}]");
+ } else {
+ x.set_header("Link", "<http://" + x.header("Host") + "/wp-json/wc/v3/products?page=2>; rel=\"next\"");
+ x.json("[{\"id\":1,\"name\":\"First fixture\",\"type\":\"simple\",\"status\":\"publish\",\"price\":\"12.00\",\"stock_status\":\"instock\"}]");
+ }
+} }
+@create_item
+fn create_item(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ let b = json_parse(x.body());
+ let title = ""; if (b.has("name")) { title = b.get("name").as_string(); }
+ let id = str(100 + x.increment("ids"));
+ let item = "{\"id\":" + id + ",\"name\":" + json_quote(title) + ",\"type\":\"simple\",\"status\":\"publish\",\"price\":\"12.00\",\"stock_status\":\"instock\"}";
+ x.set("item:" + id,item); x.status(201);
+ x.json(item);
+} }
+@get_item
+fn get_item(x: Exchange) -> void implements Handler { if (allowed(x)) {
+ let item = x.get("item:" + x.param("id"));
+ if (item == "") { x.status(404); x.json("{\"code\":\"woocommerce_rest_product_invalid_id\",\"message\":\"Invalid ID.\",\"data\":{\"status\":404}}"); } else { x.json(item); }
+} }
+route("GET","/wp-json/wc/v3/products/categories","identity");
+route("GET","/wp-json/wc/v3/products","list_items");
+route("POST","/wp-json/wc/v3/products","create_item");
+route("GET","/wp-json/wc/v3/products/{id}","get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);

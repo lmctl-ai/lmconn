@@ -1,0 +1,106 @@
+{
+  "steps": [
+    {
+      "name": "credential test endpoint",
+      "path": "/admin/api/2024-07/products.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "json": {
+        "products.0.id": 1
+      }
+    },
+    {
+      "name": "first page",
+      "path": "/admin/api/2024-07/products.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "json": {
+        "products.0.id": 1
+      }
+    },
+    {
+      "name": "last page",
+      "path": "/admin/api/2024-07/products.json?page_info=page2",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "json": {
+        "products.0.id": 2
+      }
+    },
+    {
+      "name": "create",
+      "path": "/admin/api/2024-07/products.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "method": "POST",
+      "body": {
+        "product": {
+          "title": "Created \"fixture\" 世界"
+        }
+      },
+      "status": 201,
+      "capture": {
+        "id": "product.id"
+      },
+      "json": {
+        "product.title": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/admin/api/2024-07/products/${id}.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "json": {
+        "product.title": "Created \"fixture\" 世界"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/admin/api/2024-07/products/999.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "errors": "Not Found"
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/admin/api/2024-07/products.json",
+      "status": 401,
+      "json": {
+        "errors": "[API] Invalid API key or access token (unrecognized login or wrong password)"
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/admin/api/2024-07/products.json",
+      "headers": {
+        "X-Shopify-Access-Token": "wrong"
+      },
+      "status": 401,
+      "json": {
+        "errors": "[API] Invalid API key or access token (unrecognized login or wrong password)"
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/admin/api/2024-07/products.json",
+      "headers": {
+        "X-Shopify-Access-Token": "fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "errors": "An unexpected error occurred"
+      }
+    }
+  ]
+}
