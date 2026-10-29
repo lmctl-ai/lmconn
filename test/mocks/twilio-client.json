@@ -1,0 +1,142 @@
+{
+  "steps": [
+    {
+      "name": "credential account",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture.json",
+      "status": 200,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4="
+      },
+      "json": {
+        "sid": "ACfixture",
+        "status": "active"
+      }
+    },
+    {
+      "name": "form SMS with encoded characters",
+      "method": "POST",
+      "path": "/2010-04-01/Accounts/ACfixture/Messages.json",
+      "status": 201,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "json": {
+        "to": "+15550000002",
+        "from": "+15550000001",
+        "body": "hello & \u4e16\u754c",
+        "status": "queued"
+      },
+      "body": "To=%2B15550000002&From=%2B15550000001&Body=hello+%26+%E4%B8%96%E7%95%8C",
+      "capture": {
+        "message": "sid"
+      }
+    },
+    {
+      "name": "read created SMS",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture/Messages/${message}.json",
+      "status": 200,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4="
+      },
+      "json": {
+        "sid": "${message}",
+        "body": "hello & \u4e16\u754c"
+      }
+    },
+    {
+      "name": "form voice call",
+      "method": "POST",
+      "path": "/2010-04-01/Accounts/ACfixture/Calls.json",
+      "status": 201,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "json": {
+        "status": "queued",
+        "to": "+15550000002"
+      },
+      "body": "To=%2B15550000002&From=%2B15550000001&Twiml=%3CResponse%3E%3CSay%3Ehello%3C%2FSay%3E%3C%2FResponse%3E",
+      "capture": {
+        "call": "sid"
+      }
+    },
+    {
+      "name": "read created call",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture/Calls/${call}.json",
+      "status": 200,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4="
+      },
+      "json": {
+        "sid": "${call}"
+      }
+    },
+    {
+      "name": "missing auth",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture.json",
+      "status": 401,
+      "json": {
+        "code": 20003,
+        "status": 401
+      }
+    },
+    {
+      "name": "wrong auth",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture.json",
+      "status": 401,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOndyb25n"
+      },
+      "json": {
+        "code": 20003
+      }
+    },
+    {
+      "name": "missing To",
+      "method": "POST",
+      "path": "/2010-04-01/Accounts/ACfixture/Messages.json",
+      "status": 400,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "json": {
+        "code": 21604
+      },
+      "body": "From=x&Body=hello"
+    },
+    {
+      "name": "unknown message",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture/Messages/unknown.json",
+      "status": 404,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4="
+      },
+      "json": {
+        "code": 20404
+      }
+    },
+    {
+      "name": "rate limit",
+      "method": "GET",
+      "path": "/2010-04-01/Accounts/ACfixture.json",
+      "status": 429,
+      "headers": {
+        "Authorization": "Basic QUNmaXh0dXJlOmZpeHR1cmUtdG9rZW4=",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "code": 20429,
+        "status": 429
+      }
+    }
+  ]
+}

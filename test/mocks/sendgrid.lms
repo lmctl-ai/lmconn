@@ -1,0 +1,44 @@
+# n8n SendGridApi.credentials.ts, SendGrid/GenericFunctions.ts, SendGrid.node.ts and test/SendGrid.node.test.ts.
+# Source dd5f870ecc38344951fb3956f1a7ba7852612c70; config {"token":"..."}, default fixture-token.
+# Lists are a fixed single-page snapshot; created lists support read-back. Mail acceptance only, no delivery.
+p = _lmcode_ schema="schema.json";
+fn error(x: Exchange, status: int, message: string, field: string) -> void { let value = "null"; if (field != "") { value = json_quote(field); } x.status(status); x.json("{\"errors\":[{\"message\":" + json_quote(message) + ",\"field\":" + value + ",\"help\":null}]}"); }
+fn ready(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; if (c.has("token")) { token = c.get("token").as_string(); }
+ let ok = false;
+ if (!secure_equal(x.header("Authorization"), "Bearer " + token)) { error(x, 401, "The provided authorization grant is invalid, expired, or revoked", ""); }
+ else if (x.header("X-Lmmock-Fault") == "429") { x.set_header("Retry-After", "1"); error(x, 429, "too many requests", ""); }
+ else { ok = true; } return ok;
+}
+@scopes
+fn scopes(x: Exchange) -> void implements Handler { if (ready(x)) { x.json("{\"scopes\":[\"mail.send\",\"marketing.read\",\"marketing.write\"]}"); } }
+@mail
+fn mail(x: Exchange) -> void implements Handler {
+ if (ready(x)) { let b = json_parse(x.body());
+  if (!b.has("personalizations") || !b.has("from") || !b.has("subject") || !b.has("content")) { error(x, 400, "Required mail fields are missing", "personalizations"); }
+  else { x.status(202); x.set_header("X-Message-Id", "fixture-mail-1"); x.send(""); }
+ }
+}
+@lists
+fn lists(x: Exchange) -> void implements Handler { if (ready(x)) { x.json("{\"result\":[{\"id\":\"list-fixture\",\"name\":\"Fixture list\",\"contact_count\":2}],\"_metadata\":{}}"); } }
+@create_list
+fn create_list(x: Exchange) -> void implements Handler {
+ if (ready(x)) { let b = json_parse(x.body());
+  if (!b.has("name") || b.get("name").as_string() == "") { error(x, 400, "name is required", "name"); }
+  else { let id = "list-created-" + str(x.increment("sendgrid-id")); let payload = "{\"id\":" + json_quote(id) + ",\"name\":" + json_quote(b.get("name").as_string()) + ",\"contact_count\":0}"; x.set("sendgrid:" + id, payload); x.status(201); x.json(payload); }
+ }
+}
+@read_list
+fn read_list(x: Exchange) -> void implements Handler {
+ if (ready(x)) { let payload = x.get("sendgrid:" + x.param("id"));
+  if (x.param("id") == "list-fixture") { payload = "{\"id\":\"list-fixture\",\"name\":\"Fixture list\",\"contact_count\":2}"; }
+  if (payload == "") { error(x, 404, "Not Found", ""); } else { x.json(payload); }
+ }
+}
+route("GET", "/v3/scopes", "scopes");
+route("POST", "/v3/mail/send", "mail");
+route("GET", "/v3/marketing/lists", "lists");
+route("POST", "/v3/marketing/lists", "create_list");
+route("GET", "/v3/marketing/lists/{id}", "read_list");
+end _lmcode_
+savedsl(p, ARGV[0]);

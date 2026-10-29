@@ -1,0 +1,52 @@
+# n8n MailchimpApi.credentials.ts, Mailchimp/GenericFunctions.ts and Mailchimp.node.ts.
+# Source dd5f870ecc38344951fb3956f1a7ba7852612c70: n8n uses apikey header, tests /lists (NOT /ping).
+# Config {"token":"..."}, default fixture-token-us1. OAuth is out of scope.
+# Snapshot list pages end at any positive offset. Replicas support read-back; send changes local status only.
+p = _lmcode_ schema="schema.json";
+fn error(x: Exchange, status: int, title: string, detail: string) -> void { x.status(status); x.json("{\"type\":\"https://mailchimp.com/developer/marketing/docs/errors/\",\"title\":" + json_quote(title) + ",\"status\":" + str(status) + ",\"detail\":" + json_quote(detail) + ",\"instance\":\"fixture-request\"}"); }
+fn ready(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token-us1"; if (c.has("token")) { token = c.get("token").as_string(); }
+ let ok = false;
+ if (!secure_equal(x.header("Authorization"), "apikey " + token)) { error(x, 401, "API Key Invalid", "Your API key may be invalid, or you have accessed the wrong datacenter."); }
+ else if (x.header("X-Lmmock-Fault") == "429") { x.set_header("Retry-After", "1"); error(x, 429, "Too Many Requests", "You have exceeded the limit of simultaneous connections."); }
+ else { ok = true; } return ok;
+}
+fn campaign(x: Exchange, id: string) -> string {
+ let value = x.get("mailchimp:" + id);
+ if (value == "" && id == "campaign-fixture") { value = "{\"id\":\"campaign-fixture\",\"type\":\"regular\",\"status\":\"save\",\"recipients\":{\"list_id\":\"list-fixture\"},\"settings\":{\"subject_line\":\"Fixture campaign\"}}"; }
+ return value;
+}
+@lists
+fn lists(x: Exchange) -> void implements Handler { if (ready(x)) {
+ if (x.query("offset") != "" && x.query("offset") != "0") { x.json("{\"lists\":[],\"total_items\":1}"); }
+ else { x.json("{\"lists\":[{\"id\":\"list-fixture\",\"name\":\"Fixture audience\",\"stats\":{\"member_count\":2}}],\"total_items\":1}"); }
+} }
+@campaigns
+fn campaigns(x: Exchange) -> void implements Handler { if (ready(x)) {
+ if (x.query("offset") != "" && x.query("offset") != "0") { x.json("{\"campaigns\":[],\"total_items\":1}"); }
+ else { x.json("{\"campaigns\":[" + campaign(x, "campaign-fixture") + "],\"total_items\":1}"); }
+} }
+@read
+fn read(x: Exchange) -> void implements Handler { if (ready(x)) { let p = campaign(x, x.param("id")); if (p == "") { error(x, 404, "Resource Not Found", "The requested resource could not be found."); } else { x.json(p); } } }
+@replicate
+fn replicate(x: Exchange) -> void implements Handler { if (ready(x)) {
+ let p = campaign(x, x.param("id"));
+ if (p == "") { error(x, 404, "Resource Not Found", "The requested resource could not be found."); }
+ else { let id = "campaign-copy-" + str(x.increment("mailchimp-id")); let b = json_parse(p);
+ let payload = "{\"id\":" + json_quote(id) + ",\"type\":\"regular\",\"status\":\"save\",\"recipients\":" + b.get("recipients").to_json() + ",\"settings\":" + b.get("settings").to_json() + "}";
+ x.set("mailchimp:" + id, payload); x.json(payload);
+ }
+} }
+@send
+fn send(x: Exchange) -> void implements Handler { if (ready(x)) {
+ let id = x.param("id"); let p = campaign(x, id);
+ if (p == "") { error(x, 404, "Resource Not Found", "The requested resource could not be found."); }
+ else { let b = json_parse(p); x.set("mailchimp:" + id, "{\"id\":" + json_quote(id) + ",\"type\":\"regular\",\"status\":\"sent\",\"recipients\":" + b.get("recipients").to_json() + ",\"settings\":" + b.get("settings").to_json() + "}"); x.status(204); x.send(""); }
+} }
+route("GET", "/3.0/lists", "lists");
+route("GET", "/3.0/campaigns", "campaigns");
+route("GET", "/3.0/campaigns/{id}", "read");
+route("POST", "/3.0/campaigns/{id}/actions/replicate", "replicate");
+route("POST", "/3.0/campaigns/{id}/actions/send", "send");
+end _lmcode_
+savedsl(p, ARGV[0]);

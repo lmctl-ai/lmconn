@@ -1,0 +1,163 @@
+{
+  "steps": [
+    {
+      "name": "credential scopes",
+      "method": "GET",
+      "path": "/v3/scopes",
+      "status": 200,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "scopes.0": "mail.send"
+      }
+    },
+    {
+      "name": "accept mail without response body",
+      "method": "POST",
+      "path": "/v3/mail/send",
+      "status": 202,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {
+        "from": {
+          "email": "sender@example.test"
+        },
+        "personalizations": [
+          {
+            "to": [
+              {
+                "email": "reader@example.test"
+              }
+            ]
+          }
+        ],
+        "subject": "Fixture",
+        "content": [
+          {
+            "type": "text/plain",
+            "value": "hello"
+          }
+        ]
+      }
+    },
+    {
+      "name": "list snapshot terminates pagination",
+      "method": "GET",
+      "path": "/v3/marketing/lists",
+      "status": 200,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "result.0.id": "list-fixture",
+        "_metadata": {}
+      }
+    },
+    {
+      "name": "create list",
+      "method": "POST",
+      "path": "/v3/marketing/lists",
+      "status": 201,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "name": "Fixture \"new\"",
+        "contact_count": 0
+      },
+      "body": {
+        "name": "Fixture \"new\""
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created list",
+      "method": "GET",
+      "path": "/v3/marketing/lists/${id}",
+      "status": 200,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "id": "${id}",
+        "name": "Fixture \"new\""
+      }
+    },
+    {
+      "name": "missing auth",
+      "method": "GET",
+      "path": "/v3/scopes",
+      "status": 401,
+      "json": {
+        "errors.0.message": "The provided authorization grant is invalid, expired, or revoked"
+      }
+    },
+    {
+      "name": "wrong auth",
+      "method": "GET",
+      "path": "/v3/scopes",
+      "status": 401,
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "json": {
+        "errors.0.help": null
+      }
+    },
+    {
+      "name": "missing name",
+      "method": "POST",
+      "path": "/v3/marketing/lists",
+      "status": 400,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "errors.0.field": "name"
+      },
+      "body": {}
+    },
+    {
+      "name": "missing mail fields",
+      "method": "POST",
+      "path": "/v3/mail/send",
+      "status": 400,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "errors.0.field": "personalizations"
+      },
+      "body": {}
+    },
+    {
+      "name": "unknown list",
+      "method": "GET",
+      "path": "/v3/marketing/lists/unknown",
+      "status": 404,
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "errors.0.message": "Not Found"
+      }
+    },
+    {
+      "name": "rate limit",
+      "method": "GET",
+      "path": "/v3/scopes",
+      "status": 429,
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "errors.0.message": "too many requests"
+      }
+    }
+  ]
+}

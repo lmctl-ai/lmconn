@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmmock",
-  "commit": "1bce2dd20204a58d316314eeb9676bed2e40ec0b",
+  "commit": "1d579b5ba319134181b7428471ce22e1417861bd",
   "sha256": {
     "schema.json": "a7654e6cb25fb2c56d36a441adb0016db63d7fd466cdcdc32d11d588f4233ff4",
     "oauth.lms": "efb0a3d9e460d2614b8b6f915c7ed0c79d06514f021fef4bf77f8ade1eeee1c2",
@@ -34,6 +34,12 @@
     "datadog.lms": "bf9f1d93297b4f321528d4f6669f36c147276eaf3b0dcb4c7830b2b225cf5bda",
     "datadog-client.json": "a083f89c79a27376a2f955dd2f84a5485c8bf09fc6497c49970b22a8b5179183",
     "linear.lms": "a8c9fd901115dd0363ca512edeb8b4b904f32611fd381556fcb1cab51a0fdc02",
-    "linear-client.json": "5c7a4ae2011de559262b14fe5154e6cc91552f842240aeeb1975e65953427a6e"
+    "linear-client.json": "5c7a4ae2011de559262b14fe5154e6cc91552f842240aeeb1975e65953427a6e",
+    "twilio.lms": "b8638f1059059dd440189a434e3ad19773ed5dfdc3ab32f592199282f6f0f371",
+    "twilio-client.json": "5cb8e03b2eb3cf03f06cc55556c8bdae07ea9c3bf60460f2d3d3c59ea6cd33b3",
+    "sendgrid.lms": "9a0a734491c1e2c06f4af4a4dd4027f7044eb22fb4226be9cb820a4df128cbe4",
+    "sendgrid-client.json": "d891b9721eea3d1df9e0209772fe08d27f613a0e54c5278d11e50d3641c30b40",
+    "mailchimp.lms": "43603e9f7e718a5d9baaef2eebc84cb761fa2eb67dc5272d9237c87c91c5c368",
+    "mailchimp-client.json": "cf4715cc1fcb1fd7d8a0042f9299dd1ec331b260fb2d0ff16a830f8e1eecbb2c"
   }
 }

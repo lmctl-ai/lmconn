@@ -1,0 +1,169 @@
+{
+  "steps": [
+    {
+      "name": "credential lists",
+      "method": "GET",
+      "path": "/3.0/lists?offset=0&count=500",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "lists.0.id": "list-fixture",
+        "total_items": 1
+      }
+    },
+    {
+      "name": "lists end page",
+      "method": "GET",
+      "path": "/3.0/lists?offset=500&count=500",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "lists": [],
+        "total_items": 1
+      }
+    },
+    {
+      "name": "campaign snapshot",
+      "method": "GET",
+      "path": "/3.0/campaigns?offset=0&count=500",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "campaigns.0.id": "campaign-fixture",
+        "total_items": 1
+      }
+    },
+    {
+      "name": "campaigns end page",
+      "method": "GET",
+      "path": "/3.0/campaigns?offset=500&count=500",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "campaigns": []
+      }
+    },
+    {
+      "name": "replicate campaign",
+      "method": "POST",
+      "path": "/3.0/campaigns/campaign-fixture/actions/replicate",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "status": "save",
+        "settings.subject_line": "Fixture campaign"
+      },
+      "body": {},
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read replica",
+      "method": "GET",
+      "path": "/3.0/campaigns/${id}",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "id": "${id}",
+        "status": "save"
+      }
+    },
+    {
+      "name": "send replica",
+      "method": "POST",
+      "path": "/3.0/campaigns/${id}/actions/send",
+      "status": 204,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "body": {}
+    },
+    {
+      "name": "read sent replica",
+      "method": "GET",
+      "path": "/3.0/campaigns/${id}",
+      "status": 200,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "id": "${id}",
+        "status": "sent"
+      }
+    },
+    {
+      "name": "missing auth",
+      "method": "GET",
+      "path": "/3.0/lists",
+      "status": 401,
+      "json": {
+        "title": "API Key Invalid",
+        "status": 401
+      }
+    },
+    {
+      "name": "wrong auth",
+      "method": "GET",
+      "path": "/3.0/lists",
+      "status": 401,
+      "headers": {
+        "Authorization": "apikey wrong"
+      },
+      "json": {
+        "title": "API Key Invalid"
+      }
+    },
+    {
+      "name": "unknown campaign",
+      "method": "GET",
+      "path": "/3.0/campaigns/unknown",
+      "status": 404,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "title": "Resource Not Found"
+      }
+    },
+    {
+      "name": "cannot replicate missing campaign",
+      "method": "POST",
+      "path": "/3.0/campaigns/unknown/actions/replicate",
+      "status": 404,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1"
+      },
+      "json": {
+        "status": 404
+      },
+      "body": {}
+    },
+    {
+      "name": "rate limit",
+      "method": "GET",
+      "path": "/3.0/lists",
+      "status": 429,
+      "headers": {
+        "Authorization": "apikey fixture-token-us1",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "title": "Too Many Requests",
+        "status": 429
+      }
+    }
+  ]
+}

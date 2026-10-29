@@ -1,0 +1,47 @@
+# n8n TwilioApi.credentials.ts, Twilio/GenericFunctions.ts and Twilio.node.ts.
+# Source dd5f870ecc38344951fb3956f1a7ba7852612c70. Auth-token mode only.
+# Defaults: accountSid ACfixture, authToken fixture-token; credential overrides only.
+# Form SMS/call creation; read-back by returned SID. No delivery, callbacks or TwiML execution.
+p = _lmcode_ schema="schema.json";
+fn credential(key: string, fallback: string) -> string { let c = json_parse(config()); let v = fallback; if (c.has(key)) { v = c.get(key).as_string(); } return v; }
+fn error(x: Exchange, status: int, code: int, message: string) -> void {
+ x.status(status); x.json("{\"status\":" + str(status) + ",\"code\":" + str(code) + ",\"message\":" + json_quote(message) + ",\"more_info\":\"https://www.twilio.com/docs/errors/" + str(code) + "\"}");
+}
+fn ready(x: Exchange) -> bool {
+ let ok = false; let auth = x.header("Authorization"); let sid = credential("accountSid", "ACfixture");
+ if (!secure_equal(basic_id(auth), sid) || !secure_equal(basic_secret(auth), credential("authToken", "fixture-token"))) { error(x, 401, 20003, "Authentication Error"); }
+ else if (x.param("account") != sid && x.param("account") != sid + ".json") { error(x, 404, 20404, "The requested resource was not found"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { x.set_header("Retry-After", "1"); error(x, 429, 20429, "Too many requests"); }
+ else { ok = true; }
+ return ok;
+}
+@account
+fn account(x: Exchange) -> void implements Handler { if (ready(x)) { x.json("{\"sid\":" + json_quote(credential("accountSid", "ACfixture")) + ",\"friendly_name\":\"Fixture account\",\"status\":\"active\",\"type\":\"Full\"}"); } }
+fn create(x: Exchange, kind: string) -> void {
+ if (ready(x)) {
+  let to = form_get(x.body(), "To"); let from = form_get(x.body(), "From");
+  if (to == "") { error(x, 400, 21604, "A 'To' phone number is required."); }
+  else if (from == "") { error(x, 400, 21603, "A 'From' phone number is required."); }
+  else if (kind == "SM" && form_get(x.body(), "Body") == "") { error(x, 400, 21602, "Message body is required."); }
+  else if (kind == "CA" && form_get(x.body(), "Twiml") == "" && form_get(x.body(), "Url") == "") { error(x, 400, 21205, "Url or Twiml is required."); }
+  else {
+   let id = kind + "fixture" + str(x.increment("twilio-id"));
+   let payload = "{\"sid\":" + json_quote(id) + ",\"account_sid\":" + json_quote(credential("accountSid", "ACfixture")) + ",\"to\":" + json_quote(to) + ",\"from\":" + json_quote(from) + ",\"status\":\"queued\"";
+   if (kind == "SM") { payload = payload + ",\"body\":" + json_quote(form_get(x.body(), "Body")); }
+   payload = payload + "}"; x.set("twilio:" + id + ".json", payload); x.status(201); x.json(payload);
+  }
+ }
+}
+@send_message
+fn send_message(x: Exchange) -> void implements Handler { create(x, "SM"); }
+@call
+fn call(x: Exchange) -> void implements Handler { create(x, "CA"); }
+@read
+fn read(x: Exchange) -> void implements Handler { if (ready(x)) { let payload = x.get("twilio:" + x.param("id")); if (payload == "") { error(x, 404, 20404, "The requested resource was not found"); } else { x.json(payload); } } }
+route("GET", "/2010-04-01/Accounts/{account}", "account");
+route("POST", "/2010-04-01/Accounts/{account}/Messages.json", "send_message");
+route("POST", "/2010-04-01/Accounts/{account}/Calls.json", "call");
+route("GET", "/2010-04-01/Accounts/{account}/Messages/{id}", "read");
+route("GET", "/2010-04-01/Accounts/{account}/Calls/{id}", "read");
+end _lmcode_
+savedsl(p, ARGV[0]);
