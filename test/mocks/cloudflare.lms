@@ -1,0 +1,33 @@
+# cloudflare HTTP subset; synthetic credentials only. Config: {"token":"fixture-token"}.
+p = _lmcode_ schema="schema.json";
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(403); x.json("{\"success\":false,\"result\":null,\"errors\":[{\"code\":10000,\"message\":\"Authentication error\"}],\"messages\":[]}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"success\":false,\"result\":null,\"errors\":[{\"code\":1000,\"message\":\"Internal Server Error\"}],\"messages\":[]}"); }
+ return ok;
+}
+fn field(x: Exchange, key: string) -> string { let value = "";
+ if (str_starts_with(str_trim(x.body()), "{")) { let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); } } return value; }
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"success\":true,\"result\":{\"id\":\"token-fixture\",\"status\":\"active\"},\"errors\":[],\"messages\":[]}"); } }
+@zones
+fn zones(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"success\":true,\"result\":[{\"id\":\"zone-fixture\",\"name\":\"example.invalid\",\"status\":\"active\"}],\"errors\":[],\"messages\":[],\"result_info\":{\"page\":1,\"per_page\":20,\"total_pages\":1,\"total_count\":1}}"); } }
+@list_certificates
+fn list_certificates(x: Exchange) -> void implements Handler { if (allowed(x)) { if (x.query("page") == "2") { x.json("{\"success\":true,\"result\":[{\"id\":\"certificate-2\",\"status\":\"active\"}],\"errors\":[],\"messages\":[],\"result_info\":{\"page\":2,\"per_page\":1,\"total_pages\":2,\"total_count\":2}}"); } else { x.json("{\"success\":true,\"result\":[{\"id\":\"certificate-1\",\"status\":\"active\"}],\"errors\":[],\"messages\":[],\"result_info\":{\"page\":1,\"per_page\":1,\"total_pages\":2,\"total_count\":2}}"); } } }
+@upload_certificate
+fn upload_certificate(x: Exchange) -> void implements Handler { if (allowed(x)) { if (field(x,"certificate") == "" || field(x,"private_key") == "") { x.status(400); x.json("{\"success\":false,\"result\":null,\"errors\":[{\"code\":1001,\"message\":\"Missing certificate or private_key\"}],\"messages\":[]}"); } else { let id = "uploaded-"+str(x.increment("ids")); let item = "{\"id\":"+json_quote(id)+",\"status\":\"active\",\"certificate\":"+json_quote(field(x,"certificate"))+"}"; x.set("certificate:"+x.param("zone")+":"+id,item); x.json("{\"success\":true,\"result\":"+item+",\"errors\":[],\"messages\":[]}"); } } }
+@get_certificate
+fn get_certificate(x: Exchange) -> void implements Handler { if (allowed(x)) { let item = x.get("certificate:"+x.param("zone")+":"+x.param("id")); if (item == "") { x.status(404); x.json("{\"success\":false,\"result\":null,\"errors\":[{\"code\":1001,\"message\":\"Certificate not found\"}],\"messages\":[]}"); } else { x.json("{\"success\":true,\"result\":"+item+",\"errors\":[],\"messages\":[]}"); } } }
+@delete_certificate
+fn delete_certificate(x: Exchange) -> void implements Handler { if (allowed(x)) { let item = x.take("certificate:"+x.param("zone")+":"+x.param("id")); if (item == "") { x.status(404); x.json("{\"success\":false,\"result\":null,\"errors\":[{\"code\":1001,\"message\":\"Certificate not found\"}],\"messages\":[]}"); } else { x.json("{\"success\":true,\"result\":"+item+",\"errors\":[],\"messages\":[]}"); } } }
+
+route("GET","/client/v4/user/tokens/verify","identity");
+route("GET","/client/v4/zones","zones");
+route("GET","/client/v4/zones/{zone}/origin_tls_client_auth","list_certificates");
+route("POST","/client/v4/zones/{zone}/origin_tls_client_auth","upload_certificate");
+route("GET","/client/v4/zones/{zone}/origin_tls_client_auth/{id}","get_certificate");
+route("DELETE","/client/v4/zones/{zone}/origin_tls_client_auth/{id}","delete_certificate");
+end _lmcode_
+savedsl(p, ARGV[0]);

@@ -1,0 +1,164 @@
+{
+  "steps": [
+    {
+      "name": "token verification",
+      "path": "/client/v4/user/tokens/verify",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "success": true,
+        "result.status": "active"
+      }
+    },
+    {
+      "name": "zones",
+      "path": "/client/v4/zones",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "result.0.id": "zone-fixture"
+      }
+    },
+    {
+      "name": "certificate first page",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth?page=1",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "result.0.id": "certificate-1",
+        "result_info.page": 1,
+        "result_info.total_pages": 2
+      }
+    },
+    {
+      "name": "certificate last page",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth?page=2",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "result.0.id": "certificate-2",
+        "result_info.page": 2,
+        "result_info.total_pages": 2
+      }
+    },
+    {
+      "name": "upload certificate",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "success": true,
+        "result.certificate": "dummy-certificate"
+      },
+      "body": {
+        "certificate": "dummy-certificate",
+        "private_key": "dummy-private-key"
+      },
+      "capture": {
+        "id": "result.id"
+      }
+    },
+    {
+      "name": "read certificate",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth/${id}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "result.certificate": "dummy-certificate"
+      }
+    },
+    {
+      "name": "delete certificate",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth/${id}",
+      "method": "DELETE",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "success": true
+      }
+    },
+    {
+      "name": "deleted certificate",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth/${id}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "success": false
+      }
+    },
+    {
+      "name": "invalid upload",
+      "path": "/client/v4/zones/zone-fixture/origin_tls_client_auth",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 400,
+      "json": {
+        "success": false
+      },
+      "body": {}
+    },
+    {
+      "name": "missing auth",
+      "path": "/client/v4/user/tokens/verify",
+      "method": "GET",
+      "headers": {},
+      "status": 403,
+      "json": {
+        "success": false,
+        "errors.0.code": 10000
+      }
+    },
+    {
+      "name": "wrong auth",
+      "path": "/client/v4/user/tokens/verify",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 403,
+      "json": {
+        "success": false,
+        "errors.0.code": 10000
+      }
+    },
+    {
+      "name": "fault",
+      "path": "/client/v4/user/tokens/verify",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "success": false,
+        "errors.0.code": 1000
+      }
+    }
+  ]
+}

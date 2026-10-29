@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
-const files=['schema.json','oauth.lms','connector-http.lms','llm.lms','github.lms', ...['slack','discord','telegram','jira','stripe','notion','airtable','hubspot','gitlab','asana','trello','shopify','wordpress','woocommerce','pagerduty','datadog','linear','twilio','sendgrid','mailchimp'].flatMap(name=>[name+'.lms',name+'-client.json'])];
+const files=['schema.json','oauth.lms','connector-http.lms','llm.lms','github.lms', ...['slack','discord','telegram','jira','stripe','notion','airtable','hubspot','gitlab','asana','trello','shopify','wordpress','woocommerce','pagerduty','datadog','linear','twilio','sendgrid','mailchimp','dropbox','box','cloudflare'].flatMap(name=>[name+'.lms',name+'-client.json'])];
 const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
 const lockPath=path.join(root,'test/mocks/lmmock.lock.json');
 if(process.argv[2]==='--check') {

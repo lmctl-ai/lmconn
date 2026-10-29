@@ -1,0 +1,30 @@
+# box HTTP subset; synthetic credentials only. Config: {"token":"fixture-token"}.
+p = _lmcode_ schema="schema.json";
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"type\":\"error\",\"status\":401,\"code\":\"unauthorized\",\"message\":\"Fixture request failed\",\"request_id\":\"fixture-request\"}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"type\":\"error\",\"status\":500,\"code\":\"internal_server_error\",\"message\":\"Fixture request failed\",\"request_id\":\"fixture-request\"}"); }
+ return ok;
+}
+fn field(x: Exchange, key: string) -> string { let value = "";
+ if (str_starts_with(str_trim(x.body()), "{")) { let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); } } return value; }
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"type\":\"user\",\"id\":\"user-fixture\",\"name\":\"Fixture User\",\"login\":\"fixture@example.invalid\"}"); } }
+@search
+fn search(x: Exchange) -> void implements Handler { if (allowed(x)) { let offset = x.query("offset"); if (offset == "" || offset == "0") { x.json("{\"total_count\":1,\"offset\":0,\"limit\":100,\"entries\":[{\"type\":\"folder\",\"id\":\"folder-fixture\",\"name\":\"Fixture folder\"}]}"); } else { x.json("{\"total_count\":1,\"offset\":100,\"limit\":100,\"entries\":[]}"); } } }
+@create_folder
+fn create_folder(x: Exchange) -> void implements Handler { if (allowed(x)) { let b = json_parse(x.body()); if (!b.has("name") || !b.has("parent")) { x.status(400); x.json("{\"type\":\"error\",\"status\":400,\"code\":\"bad_request\",\"message\":\"Fixture request failed\",\"request_id\":\"fixture-request\"}"); } else { let id = "folder-"+str(x.increment("ids")); let item = "{\"type\":\"folder\",\"id\":"+json_quote(id)+",\"name\":"+b.get("name").to_json()+",\"parent\":"+b.get("parent").to_json()+"}"; x.set("folder:"+id,item); x.status(201); x.json(item); } } }
+@folder
+fn folder(x: Exchange) -> void implements Handler { if (allowed(x)) { let item = x.get("folder:"+x.param("id")); if (x.param("id") == "folder-fixture") { x.json("{\"type\":\"folder\",\"id\":\"folder-fixture\",\"name\":\"Fixture folder\"}"); } else if (item != "") { x.json(item); } else { x.status(404); x.json("{\"type\":\"error\",\"status\":404,\"code\":\"not_found\",\"message\":\"Fixture request failed\",\"request_id\":\"fixture-request\"}"); } } }
+@file
+fn file(x: Exchange) -> void implements Handler { if (allowed(x)) { if (x.param("id") == "file-fixture") { x.json("{\"type\":\"file\",\"id\":\"file-fixture\",\"name\":\"fixture.txt\",\"size\":7}"); } else { x.status(404); x.json("{\"type\":\"error\",\"status\":404,\"code\":\"not_found\",\"message\":\"Fixture request failed\",\"request_id\":\"fixture-request\"}"); } } }
+
+route("GET","/2.0/users/me","identity");
+route("GET","/2.0/search","search");
+route("POST","/2.0/folders","create_folder");
+route("GET","/2.0/folders/{id}","folder");
+route("GET","/2.0/files/{id}","file");
+end _lmcode_
+savedsl(p, ARGV[0]);

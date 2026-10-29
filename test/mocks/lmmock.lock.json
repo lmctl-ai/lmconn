@@ -46,6 +46,12 @@
     "sendgrid.lms": "9a0a734491c1e2c06f4af4a4dd4027f7044eb22fb4226be9cb820a4df128cbe4",
     "sendgrid-client.json": "d891b9721eea3d1df9e0209772fe08d27f613a0e54c5278d11e50d3641c30b40",
     "mailchimp.lms": "43603e9f7e718a5d9baaef2eebc84cb761fa2eb67dc5272d9237c87c91c5c368",
-    "mailchimp-client.json": "cf4715cc1fcb1fd7d8a0042f9299dd1ec331b260fb2d0ff16a830f8e1eecbb2c"
+    "mailchimp-client.json": "cf4715cc1fcb1fd7d8a0042f9299dd1ec331b260fb2d0ff16a830f8e1eecbb2c",
+    "dropbox.lms": "eb75bae5a34e779e43db4de50ed820f8ee05f95ad605e424e99e8b9267f60434",
+    "dropbox-client.json": "be2518b0f1b9bae1c688f84305c8f470f1c3d51ddffcbd3e5819b8095e9a2240",
+    "box.lms": "9a3680bc05cd78bfdac59729907723f365fb220eb49afa4a97d6ffb83d86f458",
+    "box-client.json": "d4b7a6c36172ed5223cb7dcc541ecbfaf51c077c1bf873f8c1e14f3c50fc5660",
+    "cloudflare.lms": "b4413e287b5b347e4ffdaef6bd820a1d4bf82c5662b378ba992de59f2ac6f3fd",
+    "cloudflare-client.json": "9d92dce32758e41f4d18b86d5e4de99ec8d06dfe46862e41d225441a8e80d800"
   }
 }

@@ -1,0 +1,34 @@
+# dropbox HTTP subset; synthetic credentials only. Config: {"token":"fixture-token"}.
+p = _lmcode_ schema="schema.json";
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"error_summary\":\"invalid_access_token/\",\"error\":{\".tag\":\"invalid_access_token\"}}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"error_summary\":\"internal_error/\",\"error\":{\".tag\":\"internal_error\"}}"); }
+ return ok;
+}
+fn field(x: Exchange, key: string) -> string { let value = "";
+ if (str_starts_with(str_trim(x.body()), "{")) { let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); } } return value; }
+fn argument(x: Exchange) -> string { let a = x.header("Dropbox-API-Arg"); if (a == "") { a = x.query("arg"); } let path = ""; if (str_starts_with(a,"{")) { let b = json_parse(a); if (b.has("path")) { path = b.get("path").as_string(); } } return path; }
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { if (str_trim(x.body()) != "" && str_trim(x.body()) != "null") { x.status(400); x.send("This endpoint expects a null request body"); } else { x.json("{\"account_id\":\"dbid:fixture\",\"name\":{\"display_name\":\"Fixture User\"},\"email\":\"fixture@example.invalid\",\"root_info\":{\".tag\":\"user\",\"root_namespace_id\":\"fixture-root\",\"home_namespace_id\":\"fixture-root\"}}"); } } }
+@list_files
+fn list_files(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"entries\":[{\".tag\":\"file\",\"id\":\"id:first\",\"name\":\"first.txt\",\"path_lower\":\"/first.txt\",\"path_display\":\"/first.txt\",\"size\":7}],\"cursor\":\"dropbox-page-2\",\"has_more\":true}"); } }
+@continue_files
+fn continue_files(x: Exchange) -> void implements Handler { if (allowed(x)) { if (field(x,"cursor") != "dropbox-page-2") { x.status(409); x.json("{\"error_summary\":\"reset/\",\"error\":{\".tag\":\"reset\"}}"); } else { x.json("{\"entries\":[{\".tag\":\"file\",\"id\":\"id:second\",\"name\":\"second.txt\",\"path_lower\":\"/second.txt\",\"path_display\":\"/second.txt\",\"size\":7}],\"cursor\":\"dropbox-done\",\"has_more\":false}"); } } }
+@create_folder
+fn create_folder(x: Exchange) -> void implements Handler { if (allowed(x)) { let path = field(x,"path"); if (path == "") { x.status(400); x.send("Missing path"); } else { x.json("{\"metadata\":{\".tag\":\"folder\",\"id\":\"id:folder-fixture\",\"path_display\":" + json_quote(path) + "}}"); } } }
+@upload
+fn upload(x: Exchange) -> void implements Handler { if (allowed(x)) { let path = argument(x); if (path == "") { x.status(400); x.send("Missing Dropbox-API-Arg path"); } else { x.set("file:"+path,x.body()); x.set("exists:"+path,"yes"); x.json("{\"id\":\"id:uploaded\",\"name\":\"uploaded.txt\",\"path_display\":"+json_quote(path)+",\"size\":"+str(str_len(x.body()))+"}"); } } }
+@download
+fn download(x: Exchange) -> void implements Handler { if (allowed(x)) { let path = argument(x); if (x.get("exists:"+path) == "") { x.status(409); x.json("{\"error_summary\":\"path/not_found/\",\"error\":{\".tag\":\"path\",\"path\":{\".tag\":\"not_found\"}}}"); } else { x.set_header("Content-Type","application/octet-stream"); x.set_header("Dropbox-API-Result","{\"id\":\"id:uploaded\"}"); x.send(x.get("file:"+path)); } } }
+
+route("POST","/2/users/get_current_account","identity");
+route("POST","/2/files/list_folder","list_files");
+route("POST","/2/files/list_folder/continue","continue_files");
+route("POST","/2/files/create_folder_v2","create_folder");
+route("POST","/2/files/upload","upload");
+route("POST","/2/files/download","download");
+end _lmcode_
+savedsl(p, ARGV[0]);

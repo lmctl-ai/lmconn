@@ -1,0 +1,176 @@
+{
+  "steps": [
+    {
+      "name": "identity null body",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "account_id": "dbid:fixture"
+      },
+      "body": "null"
+    },
+    {
+      "name": "identity omitted body",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "root_info.root_namespace_id": "fixture-root"
+      }
+    },
+    {
+      "name": "reject non-null identity body",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 400,
+      "body": {}
+    },
+    {
+      "name": "list first page",
+      "path": "/2/files/list_folder",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "has_more": true,
+        "entries.0.id": "id:first"
+      },
+      "body": {
+        "path": ""
+      },
+      "capture": {
+        "cursor": "cursor"
+      }
+    },
+    {
+      "name": "list final page",
+      "path": "/2/files/list_folder/continue",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "has_more": false,
+        "entries.0.id": "id:second"
+      },
+      "body": {
+        "cursor": "${cursor}"
+      }
+    },
+    {
+      "name": "bad cursor",
+      "path": "/2/files/list_folder/continue",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 409,
+      "json": {
+        "error_summary": "reset/"
+      },
+      "body": {
+        "cursor": "bad"
+      }
+    },
+    {
+      "name": "create folder",
+      "path": "/2/files/create_folder_v2",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "metadata.path_display": "/created"
+      },
+      "body": {
+        "path": "/created"
+      }
+    },
+    {
+      "name": "upload header argument",
+      "path": "/2/files/upload",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Dropbox-API-Arg": "{\"path\":\"/uploaded.txt\"}",
+        "Content-Type": "application/octet-stream"
+      },
+      "status": 200,
+      "json": {
+        "size": 12
+      },
+      "body": "fixture text"
+    },
+    {
+      "name": "download query argument",
+      "path": "/2/files/download?arg=%7B%22path%22%3A%22%2Fuploaded.txt%22%7D",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "contains": "fixture text"
+    },
+    {
+      "name": "missing file",
+      "path": "/2/files/download",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 409,
+      "json": {
+        "error_summary": "path/not_found/"
+      }
+    },
+    {
+      "name": "missing auth",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {},
+      "status": 401,
+      "json": {
+        "error_summary": "invalid_access_token/"
+      }
+    },
+    {
+      "name": "wrong auth",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "error_summary": "invalid_access_token/"
+      }
+    },
+    {
+      "name": "fault",
+      "path": "/2/users/get_current_account",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "error_summary": "internal_error/"
+      }
+    }
+  ]
+}

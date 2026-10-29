@@ -1,0 +1,151 @@
+{
+  "steps": [
+    {
+      "name": "identity",
+      "path": "/2.0/users/me",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "id": "user-fixture"
+      }
+    },
+    {
+      "name": "search",
+      "path": "/2.0/search?query=fixture&type=folder&limit=100&offset=0",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "entries.0.id": "folder-fixture",
+        "total_count": 1
+      }
+    },
+    {
+      "name": "search terminal empty page",
+      "path": "/2.0/search?query=fixture&type=folder&limit=100&offset=100",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "entries": []
+      }
+    },
+    {
+      "name": "create folder",
+      "path": "/2.0/folders",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 201,
+      "json": {
+        "type": "folder",
+        "name": "Created"
+      },
+      "body": {
+        "name": "Created",
+        "parent": {
+          "id": "0"
+        }
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created folder",
+      "path": "/2.0/folders/${id}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "name": "Created",
+        "parent.id": "0"
+      }
+    },
+    {
+      "name": "file metadata",
+      "path": "/2.0/files/file-fixture",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 200,
+      "json": {
+        "name": "fixture.txt"
+      }
+    },
+    {
+      "name": "missing folder",
+      "path": "/2.0/folders/missing",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "code": "not_found"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/2.0/folders",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 400,
+      "json": {
+        "code": "bad_request"
+      },
+      "body": {}
+    },
+    {
+      "name": "missing auth",
+      "path": "/2.0/users/me",
+      "method": "GET",
+      "headers": {},
+      "status": 401,
+      "json": {
+        "type": "error",
+        "status": 401
+      }
+    },
+    {
+      "name": "wrong auth",
+      "path": "/2.0/users/me",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "type": "error",
+        "status": 401
+      }
+    },
+    {
+      "name": "fault",
+      "path": "/2.0/users/me",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "type": "error",
+        "status": 500
+      }
+    }
+  ]
+}
