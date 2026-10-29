@@ -1,6 +1,6 @@
 # n8n coverage map
 
-n8n ships 400+ connector nodes. lmconn is one CLI with four command areas.
+n8n ships 400+ connector nodes. lmconn is one CLI with five command areas.
 This page states honestly what is covered today, what the generic path
 covers, and what is missing. Status as of 2026-10-28.
 
@@ -13,9 +13,9 @@ covers, and what is missing. Status as of 2026-10-28.
 | Communication | Slack, Discord, Telegram, Email | Generic path only (REST calls with a stored token) | `http request --auth slack --data ...` |
 | CRM | HubSpot, Salesforce, Pipedrive | Generic path only | `http request --auth hubspot` |
 | Databases | Postgres, MySQL, MongoDB, Redis | Not covered (not HTTP; needs drivers) | planned `src/cmd-<db>.js` or an HTTP gateway |
-| Files / storage | S3, Dropbox, Google Drive | Generic path for REST storage APIs; no OAuth2 flow, no multipart upload helper | `http request --auth` with a manually stored token |
+| Files / storage | S3, Dropbox, Google Drive | Generic path for REST storage APIs; no multipart upload helper | `lmconn oauth authorize` handles the flow; `http request --auth` uses the token |
 | Marketing | Mailchimp, SendGrid, Brevo | Generic path only | `http request --auth sendgrid --data` |
-| Productivity | Notion, Airtable, Google Sheets, Trello | Generic path for token-based APIs; Google needs an OAuth2 token stored by hand | `http request --auth notion` |
+| Productivity | Notion, Airtable, Google Sheets, Trello | Generic path for token-based and OAuth2 APIs | `lmconn oauth authorize` handles the flow; `http request --auth` uses the token |
 | Social | Twitter/X, LinkedIn, Reddit | Generic path where a bearer token works; OAuth 1.0a signing not supported | `http request --auth` |
 | Finance | Stripe, PayPal, exchange rates, crypto | Generic path; see `free-fxrates.lms`, `free-coingecko.lms` | `http request` |
 | Weather / geo | OpenWeather, Open-Meteo, geocoding | Generic path; see `free-weather-openmeteo.lms`, `free-weather-wttr.lms`, `free-geocode.lms`, `free-countries.lms` | `http request` |
@@ -33,7 +33,8 @@ generically today:
 
 - `lmconn http request <url> --method --header --data --auth SERVICE`
   performs the call; `--auth` injects `Authorization: Bearer <key>` from
-  the credential store (or `<SERVICE>_API_KEY`), so the secret never
+  a stored `api_key`, then `<SERVICE>_API_KEY`, then a stored OAuth2 token
+  with automatic refresh when expired and renewable, so the secret never
   appears in the script or on stdout.
 - lmscript does the mapping, branching and merging that n8n spreads across
   Set, IF, Merge and Code nodes, and `parallel([...])` runs branches
@@ -44,14 +45,16 @@ need no credentials: one call (`free-pokeapi.lms`), two or three merged
 calls (`free-animal-facts.lms`, `free-people-data.lms`) and a four-way
 parallel fan-out (`free-fanout.lms`, which prints per-call latency against
 total wall time). Swapping a free API for an authenticated one adds exactly
-one flag, `--auth SERVICE`, after one `lmconn cred set SERVICE api_key`.
+one flag, `--auth SERVICE`, after storing an API key or completing
+`lmconn oauth authorize SERVICE`. See [OAuth2 in lmconn](oauth2.md).
 
 ## Honest gaps
 
-- No OAuth2 flow automation. Services that require an authorization-code
-  dance (Google, Microsoft, Slack app installs) work only when a token is
-  obtained elsewhere and stored with `lmconn cred set`. Refresh tokens are
-  not rotated automatically.
+- OAuth2 authorization-code/PKCE and refresh are covered, but there is no
+  automatic client registration or OAuth 1.0a support. Token refresh is
+  single-process CLI work, with no single-flight lease across processes;
+  concurrent refreshes of a rotating token can race. Client-credentials
+  grants are not implemented.
 - No dedicated per-service operations beyond GitHub. Convenience ops such
   as "post a Slack message" or "create a Notion page" are a URL and a JSON
   body in the script today, not a named operation with validated params.

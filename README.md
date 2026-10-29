@@ -63,6 +63,33 @@ lmconn --cli-schema --json                                # cli.schema.v1 docume
 LLM providers read `<provider> api_key`; `http --auth SERVICE` reads
 `<SERVICE> api_key`; `github` reads `github api_key`.
 
+### OAuth2
+
+| Command | Does |
+|---|---|
+| `oauth authorize <service>` | authorization code + PKCE + state via a loopback callback; `--manual` accepts the redirect URL on stdin |
+| `oauth refresh <service>` | refresh stored tokens; `RECONNECT` means authorize again |
+| `oauth status <service>` | read-only authorization, expiry, and refresh-token presence; never token values |
+
+Create a GitHub OAuth App with callback `http://127.0.0.1:15847/callback`,
+and set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in your environment:
+
+```sh
+lmconn cred set github oauth_client_id --env GITHUB_OAUTH_CLIENT_ID
+lmconn cred set github oauth_client_secret --env GITHUB_OAUTH_CLIENT_SECRET
+lmconn oauth authorize github \
+  --auth-url https://github.com/login/oauth/authorize \
+  --token-url https://github.com/login/oauth/access_token \
+  --scope read:user --auth-style body --port 15847
+lmconn http request https://api.github.com/user --auth github
+```
+
+`http request --auth SERVICE` prefers a stored `api_key`, then
+`<SERVICE>_API_KEY`, then the stored OAuth token, refreshing it when expired
+and a refresh token exists. Configuration and tokens live in `oauth_*`
+fields in the credential store. See [OAuth2 in lmconn](docs/oauth2.md) for
+all options, headless setup, storage details, and testing scope.
+
 ### llm
 
 | Command | Does |

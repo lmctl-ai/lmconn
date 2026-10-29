@@ -1,0 +1,46 @@
+# Chapter: lmconnectors - GitHub OAuth2 credentials
+# Shows: read-only OAuth status, clean setup skip, and an OAuth-backed GitHub user request
+# Run: lmscript examples/oauth-github.lms
+# Needs: lmconn on PATH; a GitHub OAuth App and completed authorization (see docs/oauth2.md)
+# exit: 0
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+
+r = system(["lmconn", "oauth", "status", "github"], 10000);
+if (r.timed_out) {
+  println("lmconn timed out");
+  exit(1);
+}
+env = json_parse(r.stdout);
+if (!env.ok) {
+  println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+  exit(1);
+}
+# The status contract exposes authorization, not the client ID or any secrets.
+if (!env.result.authorized) {
+  println("SKIPPED: GitHub OAuth is not authorized. Create a GitHub OAuth App with callback http://127.0.0.1:15847/callback.");
+  println("Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in your environment, then run:");
+  println("lmconn cred set github oauth_client_id --env GITHUB_OAUTH_CLIENT_ID");
+  println("lmconn cred set github oauth_client_secret --env GITHUB_OAUTH_CLIENT_SECRET");
+  println("lmconn oauth authorize github --auth-url https://github.com/login/oauth/authorize --token-url https://github.com/login/oauth/access_token --scope read:user --auth-style body --port 15847");
+  exit(0);
+}
+
+# The generic HTTP --auth path resolves OAuth tokens and automatically refreshes them.
+r = system(["lmconn", "http", "request", "https://api.github.com/user", "--auth", "github", "--header", "Accept: application/vnd.github+json"], 120000);
+if (r.timed_out) {
+  println("lmconn timed out");
+  exit(1);
+}
+env = json_parse(r.stdout);
+if (!env.ok) {
+  println("lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message);
+  exit(1);
+}
+if (!env.result.ok) {
+  println("GitHub user request failed: HTTP " + str(env.result.status));
+  exit(1);
+}
+println("GitHub login: " + env.result.bodyJson.login);
