@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - Country facts over GraphQL (countries.trevorblades.com)
+# Chapter: lmconn - Country facts over GraphQL (countries.trevorblades.com)
 # Shows: a GraphQL POST through lmconn http request --data (n8n needs a dedicated GraphQL node for this);
 #        system(argv), the lmconn JSON envelope, one retry on 429/5xx
 # Run: lmscript examples/free-countries.lms [ISO2]
@@ -6,7 +6,7 @@
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - Public IP information
+# Chapter: lmconn - Public IP information
 # Shows: Look up this machine public IP using ipwho.is (ipapi.co's daily quota is easily exhausted on
 #        shared egress IPs), with one retry for rate limiting
 # Run: lmscript examples/free-ip.lms 
@@ -6,7 +6,7 @@
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

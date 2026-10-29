@@ -13,6 +13,25 @@ package — the true denominator, not marketing numbers. n8n 2.45.4 ships
 | OAuth 1.0a | 3 | **Gap**: request signing not implemented. |
 | Non-HTTP protocols (SQL, SMTP, FTP, queues…) | 20 | **Gap**: needs drivers, not HTTPS calls. |
 
+## Protocol (non-HTTP) nodes — the lmctl family answer
+
+Curated table (not mined): n8n's non-HTTP nodes against our family tools.
+
+| n8n node(s) | Protocol | Covered by |
+|---|---|---|
+| Postgres, MySql/MariaDB, TimescaleDb, QuestDb, CockroachDB, Snowflake, Oracle, Microsoft SQL | SQL wire / JDBC | **[lmdb](https://github.com/lmctl-ai/lmdb)** — scriptable JDBC client, one native executable |
+| Ssh; Ftp (SFTP/SCP half) | SSH | **[lmssh](https://github.com/lmctl-ai/lmssh)** — static OpenSSH client suite |
+| Elasticsearch | REST over HTTP (not a wire protocol) | **lmconn** `http request --auth` — already generic-path |
+| MongoDb | Mongo wire protocol | gap |
+| Redis | RESP | gap |
+| RabbitMQ, Amqp | AMQP 0-9-1 | gap |
+| Kafka | Kafka protocol | gap |
+| MQTT | MQTT | gap |
+| EmailSend, EmailReadImap | SMTP / IMAP | gap |
+| Ldap | LDAP | gap |
+| Ftp (plain FTP) | FTP | gap (legacy; SFTP via lmssh) |
+| AWS SQS | HTTPS + SigV4 signing | gap until SigV4 lands |
+
 ## What "covered" means — and what it does not
 
 Covered = **auth + transport**: lmconn can authenticate and call the service's

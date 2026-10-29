@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - Geocoding with OpenStreetMap Nominatim
+# Chapter: lmconn - Geocoding with OpenStreetMap Nominatim
 # Shows: URL encoding, descriptive User-Agent, HTTP retry, and up to three hits; system(argv) and the lmconn JSON envelope
 # Run: lmscript examples/free-geocode.lms [city]
 # Needs: lmconn on PATH; node on PATH for URL encoding; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 
@@ -66,7 +66,7 @@ fn fetch_json(argv) {
 city = ARGV.get(0, "Helsinki");
 url = "https://nominatim.openstreetmap.org/search?q=" + url_encode(city) + "&format=json&limit=3";
 # Public Nominatim: run manually, do not bulk-geocode or exceed one request/second.
-hits = fetch_json(["lmconn", "http", "request", url, "--header", "User-Agent: lmconnectors-example/0.1 (https://github.com/lmctl-ai/lmconnectors)", "--timeout", "40000"]);
+hits = fetch_json(["lmconn", "http", "request", url, "--header", "User-Agent: lmconn-example/0.1 (https://github.com/lmctl-ai/lmconn)", "--timeout", "40000"]);
 println("Geocoding " + city + " (© OpenStreetMap contributors, ODbL)");
 if (hits.len() == 0) {
   println("No matches found");

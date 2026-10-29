@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - free APIs: two independent calls (cat fact, dog picture)
+# Chapter: lmconn - free APIs: two independent calls (cat fact, dog picture)
 # Shows: two GETs against unrelated public APIs in one script, each parsed from result.bodyJson,
 #        a single retry on 429/5xx. In n8n this is two HTTP Request nodes and a Merge node.
 # Run: lmscript examples/free-animal-facts.lms          (lmconn on PATH: `npm link` in the repo)
 # Needs: lmconn on PATH, network; no credentials (catfact.ninja and dog.ceo are free and anonymous)
 # exit: 0
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

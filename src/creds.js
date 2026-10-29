@@ -3,12 +3,17 @@
 // prints one, for piping into other commands.
 
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 export function dbPath() {
-  return process.env.LMCONN_DB || join(homedir(), '.lmconnectors', 'creds.db');
+  if (process.env.LMCONN_DB) return process.env.LMCONN_DB;
+  // Repo was renamed lmconnectors -> lmconn; keep reading the old store.
+  const legacy = join(homedir(), '.lmconnectors', 'creds.db');
+  const current = join(homedir(), '.lmconn', 'creds.db');
+  if (!existsSync(current) && existsSync(legacy)) return legacy;
+  return current;
 }
 
 // One cached connection per path: opening a DatabaseSync per call leaks a

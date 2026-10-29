@@ -1,5 +1,5 @@
 {
-  "name": "@lmctl-ai/lmconnectors",
+  "name": "@lmctl-ai/lmconn",
   "version": "0.1.0",
   "description": "Connectors for lmscript: LLM providers and legacy services as one CLI, credentials in SQLite",
   "type": "module",

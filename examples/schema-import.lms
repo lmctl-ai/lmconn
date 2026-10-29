@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - lmconn as a schema module
+# Chapter: lmconn - lmconn as a schema module
 # Shows: import of the generated cli.schema.v1 document; each operation becomes lmconn.<area>_<sub>(...)
 #        with positional params first and the rest in one options map; calls return
 #        {status:"ok", result} | {status:"error", error:{code, message}} | {status:"simulated"} and never throw.
@@ -19,7 +19,7 @@ r = lmconn.github_repos(org, {limit: 5});
 if (r.status == "simulated") {
   println("simulated: " + r.simulated);
 } else if (r.status == "error" && r.error.code == "launch") {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
 } else if (r.status == "error") {
   # exit: lmconn exited non-zero; its own envelope is on stderr_tail only when it printed one there,
   # so re-run `lmconn github repos ORG` by hand to see {ok:false, error:{code, message}}.

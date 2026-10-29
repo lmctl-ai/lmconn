@@ -1,4 +1,4 @@
-# lmconnectors
+# lmconn
 
 `lmconn`: connectors for AI-agent workflows. One CLI, scriptable from
 lmscript through `system()` or as a cli.schema.v1 module. Credentials live
@@ -12,7 +12,7 @@ every release — the rolling `latest` prerelease tracks master, `v*` tags are
 stable:
 
 ```sh
-curl -L https://github.com/lmctl-ai/lmconnectors/releases/latest/download/lmconn-linux-x64.tar.gz | tar xz
+curl -L https://github.com/lmctl-ai/lmconn/releases/latest/download/lmconn-linux-x64.tar.gz | tar xz
 ./lmconn-linux-x64 --version
 ```
 
@@ -58,7 +58,7 @@ lmconn --cli-schema --json                                # cli.schema.v1 docume
 | `cred get <service> <field> [--reveal]` | presence check; `--reveal` returns the value |
 | `cred list` | services, fields and timestamps, never values |
 | `cred delete <service> <field>` | remove one credential |
-| `cred path` | the database path (`LMCONN_DB` overrides `~/.lmconnectors/creds.db`) |
+| `cred path` | the database path (`LMCONN_DB` overrides `~/.lmconn/creds.db`) |
 
 LLM providers read `<provider> api_key`; `http --auth SERVICE` reads
 `<SERVICE> api_key`; `github` reads `github api_key`.

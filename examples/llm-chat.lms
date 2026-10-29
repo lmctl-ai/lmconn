@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - drive lmconn through system() and parse its envelope
+# Chapter: lmconn - drive lmconn through system() and parse its envelope
 # Shows: lmconn as a plain process: system(argv, timeoutMs) with shell:false, the one-line JSON envelope
 #        {ok, result} | {ok:false, error:{code, message}}, exit codes 0 / 1 (runtime) / 2 (usage).
 # Run: lmscript examples/llm-chat.lms [provider] [prompt]      (lmconn on PATH: `npm link` in the repo)
@@ -9,7 +9,7 @@ provider = ARGV.get(0, "deepseek");
 prompt = ARGV.get(1, "Reply with the single word: ok");
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

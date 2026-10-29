@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - JSONPlaceholder fake REST CRUD
+# Chapter: lmconn - JSONPlaceholder fake REST CRUD
 # Shows: GET a post, then POST JSON with the HTTP Request connector; writes are simulated by the API
 # Run: lmscript examples/free-jsonplaceholder.lms 
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

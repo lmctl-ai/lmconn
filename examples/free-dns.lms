@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - DNS over HTTPS
+# Chapter: lmconn - DNS over HTTPS
 # Shows: Query Google public DNS and print every answer record
 # Run: lmscript examples/free-dns.lms [domain] [type]
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

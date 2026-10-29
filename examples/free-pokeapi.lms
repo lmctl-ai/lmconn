@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - free APIs: PokeAPI through lmconn http request
+# Chapter: lmconn - free APIs: PokeAPI through lmconn http request
 # Shows: one GET against a public JSON API, the envelope's result.bodyJson, picking fields out of nested
 #        maps and lists, a single retry on 429/5xx. In n8n this is an HTTP Request node plus a Set node.
 # Run: lmscript examples/free-pokeapi.lms [name]          (lmconn on PATH: `npm link` in the repo)
@@ -7,7 +7,7 @@
 name = ARGV.get(0, "pikachu");
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

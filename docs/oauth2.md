@@ -85,7 +85,7 @@ All configuration and token state uses `oauth_*` fields on the service in
 the existing SQLite credential table. Alongside the configuration above,
 authorization stores `oauth_access_token`, `oauth_refresh_token` if returned,
 `oauth_expires_at` (an ISO timestamp computed from `expires_in`), and
-`oauth_token_type`. The database defaults to `~/.lmconnectors/creds.db`;
+`oauth_token_type`. The database defaults to `~/.lmconn/creds.db`;
 `LMCONN_DB` overrides it. `cred list` shows names and timestamps, not values.
 
 ```sh

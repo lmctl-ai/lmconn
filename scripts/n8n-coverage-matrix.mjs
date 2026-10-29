@@ -21,7 +21,7 @@ const credDir = join(base, 'credentials');
 const presets = JSON.parse(execSync('cat src/oauth-presets.json', { encoding: 'utf8' }));
 const n8nVersion = require(join(n8nRoot, 'package.json')).version;
 
-const NON_HTTP = /postgres|mysql|mariadb|mongodb|redis|questdb|cockroachdb|timescaledb|snowflake|ftp|sftp|smtp|imap|mqtt|amqp|rabbitmq|kafka|nats|ldap|ssh|elasticsearch|clickhouse|surrealdb|supabase.*(db|postgres)/i;
+const NON_HTTP = /postgres|mysql|mariadb|mongodb|redis|questdb|cockroachdb|timescaledb|snowflake|ftp|sftp|smtp|imap|mqtt|amqp|rabbitmq|kafka|nats|ldap|ssh|clickhouse|surrealdb|oracle/i;
 
 const rows = [];
 for (const file of readdirSync(credDir)) {
@@ -59,6 +59,25 @@ package — the true denominator, not marketing numbers. n8n ${n8nVersion} ships
 | API key / header / query / basic | ${count((r) => r.family === 'key' && !r.nonHttp)} | **Covered generically**: \`lmconn cred set S api_key\` + \`http request --auth S\`. |
 | OAuth 1.0a | ${count((r) => r.family === 'oauth1')} | **Gap**: request signing not implemented. |
 | Non-HTTP protocols (SQL, SMTP, FTP, queues…) | ${count((r) => r.nonHttp)} | **Gap**: needs drivers, not HTTPS calls. |
+
+## Protocol (non-HTTP) nodes — the lmctl family answer
+
+Curated table (not mined): n8n's non-HTTP nodes against our family tools.
+
+| n8n node(s) | Protocol | Covered by |
+|---|---|---|
+| Postgres, MySql/MariaDB, TimescaleDb, QuestDb, CockroachDB, Snowflake, Oracle, Microsoft SQL | SQL wire / JDBC | **[lmdb](https://github.com/lmctl-ai/lmdb)** — scriptable JDBC client, one native executable |
+| Ssh; Ftp (SFTP/SCP half) | SSH | **[lmssh](https://github.com/lmctl-ai/lmssh)** — static OpenSSH client suite |
+| Elasticsearch | REST over HTTP (not a wire protocol) | **lmconn** \`http request --auth\` — already generic-path |
+| MongoDb | Mongo wire protocol | gap |
+| Redis | RESP | gap |
+| RabbitMQ, Amqp | AMQP 0-9-1 | gap |
+| Kafka | Kafka protocol | gap |
+| MQTT | MQTT | gap |
+| EmailSend, EmailReadImap | SMTP / IMAP | gap |
+| Ldap | LDAP | gap |
+| Ftp (plain FTP) | FTP | gap (legacy; SFTP via lmssh) |
+| AWS SQS | HTTPS + SigV4 signing | gap until SigV4 lands |
 
 ## What "covered" means — and what it does not
 

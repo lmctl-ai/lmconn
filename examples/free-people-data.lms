@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - free APIs: enrich one name with three services
+# Chapter: lmconn - free APIs: enrich one name with three services
 # Shows: fanning one input into three GETs (agify, genderize, nationalize), reading nested result.bodyJson,
 #        sorting a list of maps, a single retry on 429/5xx. In n8n this is three HTTP Request nodes
 #        feeding a Merge node; here it is three calls and a few lines of lmscript.
@@ -9,7 +9,7 @@
 name = ARGV.get(0, "maria");
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

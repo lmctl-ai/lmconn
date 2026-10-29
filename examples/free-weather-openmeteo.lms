@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - Current weather from Open-Meteo
+# Chapter: lmconn - Current weather from Open-Meteo
 # Shows: Coordinates, HTTP retry, and temperature/windspeed/weathercode; system(argv) and the lmconn JSON envelope
 # Run: lmscript examples/free-weather-openmeteo.lms [lat] [lon]
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

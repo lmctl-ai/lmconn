@@ -1,4 +1,4 @@
-# AGENTS.md — lmconnectors
+# AGENTS.md — lmconn
 
 One CLI, `lmconn`, gives lmscript access to LLM providers and legacy
 services. Plain ESM Node (>= 22.5), zero npm dependencies. The credential

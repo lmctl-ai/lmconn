@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - Hacker News search
+# Chapter: lmconn - Hacker News search
 # Shows: Search Algolia stories with an encoded query and print five hits
 # Run: lmscript examples/free-hackernews.lms [query]
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

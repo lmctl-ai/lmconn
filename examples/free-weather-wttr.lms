@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - Current weather from wttr.in
+# Chapter: lmconn - Current weather from wttr.in
 # Shows: URL-encoded city, HTTP retry, and current condition; system(argv) and the lmconn JSON envelope
 # Run: lmscript examples/free-weather-wttr.lms [city]
 # Needs: lmconn on PATH; node on PATH for URL encoding; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

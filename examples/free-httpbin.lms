@@ -1,11 +1,11 @@
-# Chapter: lmconnectors - HTTP request echo
+# Chapter: lmconn - HTTP request echo
 # Shows: Send a custom header and inspect echoed method, URL, headers and query arguments
 # Run: lmscript examples/free-httpbin.lms 
 # Needs: lmconn on PATH; internet access; no credentials
 # exit: 0
 
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

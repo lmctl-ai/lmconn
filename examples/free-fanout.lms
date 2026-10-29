@@ -1,4 +1,4 @@
-# Chapter: lmconnectors - free APIs: four services in parallel
+# Chapter: lmconn - free APIs: four services in parallel
 # Shows: parallel([...]) running four lmconn http request calls at once and returning results in input
 #        order; per-call latency from the envelope (result.latencyMs) against the total wall time. In n8n
 #        the same workflow is four HTTP Request branches and a Merge node, executed one after another.
@@ -8,7 +8,7 @@
 #        makes the flagship demo flaky on shared egress, see free-people-data.lms for the 429 path)
 # exit: 0
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 

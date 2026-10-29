@@ -1,10 +1,10 @@
-# Chapter: lmconnectors - GitHub OAuth2 credentials
+# Chapter: lmconn - GitHub OAuth2 credentials
 # Shows: read-only OAuth status, clean setup skip, and an OAuth-backed GitHub user request
 # Run: lmscript examples/oauth-github.lms
 # Needs: lmconn on PATH; a GitHub OAuth App and completed authorization (see docs/oauth2.md)
 # exit: 0
 if (which("lmconn") == null) {
-  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconn)");
   exit(0);
 }
 
