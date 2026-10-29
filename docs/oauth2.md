@@ -212,11 +212,13 @@ That is what makes the flow runnable without a browser.
    a finite future expiry; an omitted `expires_in` clears stale expiry and
    `status` reports `null`; unknown token-response fields are tolerated and
    never leak into metadata; HTTP 500 from the token endpoint becomes a
-   sanitized `OAUTH_ERROR`; an empty scope is preserved. The mock's
-   `misbehave` modes (`bad-state`: tampered `state` on the redirect,
-   `bad-json`: truncated token body, `string-expires`) and its
-   `rotateRefreshTokens`, `formEncodedTokenResponse`, `requirePkce` and
-   `allowPlainPkce` options are the knobs this suite grows on.
+   sanitized `OAUTH_ERROR`; an empty scope is preserved; and the mock's
+   `misbehave` modes `bad-state` (tampered `state` on the redirect) and
+   `bad-json` (truncated token body) each produce `OAUTH_ERROR` with no
+   token stored and no secret in the message. Every scenario runs with
+   `requirePkce`. The remaining knobs (`string-expires`,
+   `rotateRefreshTokens`, `formEncodedTokenResponse`, `allowPlainPkce`)
+   are where this suite grows.
 3. **Cross-validation target for n8n**: `scripts/verify-n8n-oauth.mjs`
    drives a headless n8n (2.45.4, `n8n` on PATH) against the same mock
    through n8n's REST API: owner setup, create an `oAuth2Api` credential,
