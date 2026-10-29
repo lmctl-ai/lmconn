@@ -66,7 +66,7 @@ Curated table (not mined): n8n's non-HTTP nodes against our family tools.
 
 | n8n node(s) | Protocol | Covered by |
 |---|---|---|
-| Postgres, MySql/MariaDB, TimescaleDb, QuestDb, CockroachDB, Snowflake, Oracle, Microsoft SQL | SQL wire / JDBC | **[lmdb](https://github.com/lmctl-ai/lmdb)** — scriptable JDBC client, one native executable |
+| Postgres, MySql/MariaDB, TimescaleDb, QuestDb, CockroachDB, Snowflake, Oracle, Microsoft SQL | SQL wire / JDBC | **[lmclient](https://github.com/lmctl-ai/lmclient)** (formerly lmdb) — scriptable JDBC client, one native executable; growing into the general protocol client (redis, mail, queue, mqtt, mongo areas) |
 | Ssh; Ftp (SFTP/SCP half) | SSH | **[lmssh](https://github.com/lmctl-ai/lmssh)** — static OpenSSH client suite |
 | Elasticsearch | REST over HTTP (not a wire protocol) | **lmconn** \`http request --auth\` — already generic-path |
 | MongoDb | Mongo wire protocol | gap |
@@ -77,7 +77,7 @@ Curated table (not mined): n8n's non-HTTP nodes against our family tools.
 | EmailSend, EmailReadImap | SMTP / IMAP | gap |
 | Ldap | LDAP | gap |
 | Ftp (plain FTP) | FTP | gap (legacy; SFTP via lmssh) |
-| AWS SQS | HTTPS + SigV4 signing | gap until SigV4 lands |
+| AWS SQS and other AWS services | AWS SDK (SigV4 handled) | **[lmaws](https://github.com/lmctl-ai/lmaws)** — AWS SDK for Java v2 host, one native executable, incl. an SQS queue-pipeline example |
 
 ## What "covered" means — and what it does not
 
@@ -90,8 +90,9 @@ they browse node catalogs. Dedicated ops are added per AGENTS.md only where
 validation or ergonomics pay off (so far: github).
 
 Also still missing beyond auth: webhook/trigger receivers (lmscript polls or
-system cron instead), OAuth2 client-credentials grant, request signing
-(AWS SigV4, HMAC).
+system cron instead), OAuth2 client-credentials grant. AWS SigV4 is covered
+by the sibling lmaws tool rather than by lmconn itself; HMAC webhook signing
+remains a gap.
 
 ## OAuth2 services without a preset
 
