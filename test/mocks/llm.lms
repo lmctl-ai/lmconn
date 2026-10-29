@@ -6,7 +6,7 @@ fn completion(x: Exchange) -> void implements Handler {
  while (true) {
   x.set("last",x.request_json());
   let c = json_parse(config()); let mode = field(c,"mode"); let auth = x.header("Authorization");
-  if (mode == "unauthorized" || (c.has("apiKey") && !secure_equal(auth,"Bearer " + field(c,"apiKey")))) { x.status(401); x.json("{\"error\":{\"message\":\"invalid API key\",\"type\":\"authentication_error\"}}"); break; }
+  if (mode == "unauthorized" || (c.has("apiKey") && !secure_equal(auth,"Bearer " + field(c,"apiKey")))) { x.status(401); x.json("{\"error\":{\"message\":" + json_quote("denied " + auth + " Bearer different-secret-token") + ",\"type\":\"authentication_error\"}}"); break; }
   if (mode == "rate-limit") { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\"}}"); break; }
   if (mode == "server-error") { x.status(503); x.json("{\"error\":{\"message\":\"unavailable\"}}"); break; }
   if (mode == "disconnect") { x.disconnect(); break; }

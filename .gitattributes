@@ -1,0 +1,2 @@
+# Schema and fixture locks bind exact bytes across all checkout platforms.
+test/mocks/** text eol=lf

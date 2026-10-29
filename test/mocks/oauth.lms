@@ -63,7 +63,7 @@ fn token_endpoint(x: Exchange) -> void implements Handler {
  let c = json_parse(config()); let body = x.body(); let id = form_get(body,"client_id"); let secret = form_get(body,"client_secret"); let style = "body";
  if (str_starts_with(x.header("Authorization"),"Basic ")) { id = basic_id(x.header("Authorization")); secret = basic_secret(x.header("Authorization")); style = "header"; }
  let grant = form_get(body,"grant_type"); audit(c,"/token",style,"{\"grant_type\":" + json_quote(grant) + "}");
- if (text(c,"misbehave") == "server-error") { error(x,500,"server_error"); break; }
+ if (text(c,"misbehave") == "server-error") { x.status(500); x.json("{\"error\":\"server_error\",\"error_description\":" + json_quote(secret + " " + form_get(body,"code") + " " + form_get(body,"code_verifier")) + "}"); break; }
  if (text(c,"misbehave") == "rate-limit") { x.set_header("Retry-After","1"); error(x,429,"temporarily_unavailable"); break; }
  if (text(c,"misbehave") == "disconnect") { x.disconnect(); break; }
  if (text(c,"misbehave") == "timeout") { x.delay(1000); }
