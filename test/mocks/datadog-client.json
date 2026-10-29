@@ -1,0 +1,187 @@
+{
+  "steps": [
+    {
+      "name": "credential validate without optional application key",
+      "method": "GET",
+      "path": "/api/v1/validate",
+      "headers": {
+        "DD-API-KEY": "fixture-key"
+      },
+      "json": {
+        "valid": true
+      }
+    },
+    {
+      "name": "monitor first page",
+      "method": "GET",
+      "path": "/api/v1/monitor?page=0&page_size=1",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "0.id": 101
+      }
+    },
+    {
+      "name": "monitor second page",
+      "method": "GET",
+      "path": "/api/v1/monitor?page=1&page_size=1",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "0.id": 102
+      }
+    },
+    {
+      "name": "monitor pagination terminates",
+      "method": "GET",
+      "path": "/api/v1/monitor?page=2&page_size=1",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {},
+      "contains": "[]"
+    },
+    {
+      "name": "create monitor",
+      "method": "POST",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "name": "CPU \"héllo\"",
+        "query": "avg(last_5m):avg:system.cpu.user{*} > 90"
+      },
+      "body": {
+        "name": "CPU \"héllo\"",
+        "type": "metric alert",
+        "query": "avg(last_5m):avg:system.cpu.user{*} > 90"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created monitor",
+      "method": "GET",
+      "path": "/api/v1/monitor/${id}",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "id": 1001,
+        "name": "CPU \"héllo\"",
+        "type": "metric alert"
+      }
+    },
+    {
+      "name": "invalid monitor",
+      "method": "POST",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "errors.0": "Missing required monitor fields"
+      },
+      "body": {},
+      "status": 400
+    },
+    {
+      "name": "missing monitor",
+      "method": "GET",
+      "path": "/api/v1/monitor/0",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key"
+      },
+      "json": {
+        "errors.0": "Monitor not found"
+      },
+      "status": 404
+    },
+    {
+      "name": "missing API key",
+      "method": "GET",
+      "path": "/api/v1/validate",
+      "headers": {},
+      "json": {
+        "errors.0": "Forbidden"
+      },
+      "status": 403
+    },
+    {
+      "name": "wrong API key",
+      "method": "GET",
+      "path": "/api/v1/validate",
+      "headers": {
+        "DD-API-KEY": "wrong"
+      },
+      "json": {
+        "errors.0": "Forbidden"
+      },
+      "status": 403
+    },
+    {
+      "name": "missing application key",
+      "method": "GET",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key"
+      },
+      "json": {
+        "errors.0": "Forbidden"
+      },
+      "status": 403
+    },
+    {
+      "name": "wrong application key",
+      "method": "GET",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "wrong"
+      },
+      "json": {
+        "errors.0": "Forbidden"
+      },
+      "status": 403
+    },
+    {
+      "name": "fault 429",
+      "method": "GET",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "errors.0": "Too many requests"
+      },
+      "status": 429
+    },
+    {
+      "name": "fault 500",
+      "method": "GET",
+      "path": "/api/v1/monitor",
+      "headers": {
+        "DD-API-KEY": "fixture-key",
+        "DD-APPLICATION-KEY": "fixture-app-key",
+        "X-Lmmock-Fault": "500"
+      },
+      "json": {
+        "errors.0": "Internal Server Error"
+      },
+      "status": 500
+    }
+  ]
+}

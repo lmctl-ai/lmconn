@@ -1,0 +1,63 @@
+# pagerduty selected HTTP contracts; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key) && str_starts_with(j.get(key).to_json(), "\"")) { v = j.get(key).as_string(); } return v; }
+
+fn error(x: Exchange, status: int, code: int, message: string) -> void { x.status(status); x.json("{\"error\":{\"code\":" + str(code) + ",\"message\":" + json_quote(message) + ",\"errors\":[]}}"); }
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; if (c.has("token")) { token = field(c,"token"); }
+ let ok = secure_equal(x.header("Authorization"),"Token token=" + token);
+ if (!ok) { error(x,401,2006,"Authentication failed"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); error(x,429,2020,"Rate Limit Exceeded"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; error(x,500,2000,"Internal server error"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"user\":{\"id\":\"PFIXTURE\",\"type\":\"user\",\"name\":\"Fixture User\",\"email\":\"user@example.test\"}}"); } }
+@services
+fn services(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"services\":[{\"id\":\"PSERVICE\",\"type\":\"service\",\"name\":\"Fixture Service\"}],\"limit\":100,\"offset\":0,\"more\":false,\"total\":1}"); } }
+@incidents
+fn incidents(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.query("offset") == "100") { x.json("{\"incidents\":[{\"id\":\"PSECOND\",\"type\":\"incident\",\"title\":\"Second incident\",\"status\":\"triggered\"}],\"limit\":100,\"offset\":100,\"more\":false,\"total\":101}"); }
+  else {
+   let items = "";
+   for (i in range(0,100)) {
+    if (i > 0) { items = items + ","; }
+    let id = "PPAGE" + str(i); if (i == 0) { id = "PFIRST"; }
+    items = items + "{\"id\":" + json_quote(id) + ",\"type\":\"incident\",\"title\":\"Fixture incident\",\"status\":\"triggered\"}";
+   }
+   x.json("{\"incidents\":[" + items + "],\"limit\":100,\"offset\":0,\"more\":true,\"total\":101}");
+  }
+ }
+}
+@create
+fn create(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (!b.has("incident") || x.header("From") == "") { error(x,400,2001,"Incident and From are required"); }
+  else {
+   let incident = b.get("incident");
+   if (field(incident,"title") == "" || !incident.has("service") || field(incident,"type") != "incident") { error(x,400,2001,"Invalid Input Provided"); }
+   else {
+    let id = "PCREATED" + str(x.increment("pagerduty:ids"));
+    let item = "{\"incident\":{\"id\":" + json_quote(id) + ",\"type\":\"incident\",\"title\":" + json_quote(field(incident,"title")) + ",\"status\":\"triggered\",\"service\":" + incident.get("service").to_json() + "}}";
+    x.set("pagerduty:" + id,item); x.status(201); x.json(item);
+   }
+  }
+ }
+}
+@get
+fn get(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let item = x.get("pagerduty:" + x.param("id"));
+  if (item == "") { error(x,404,2100,"Not Found"); } else { x.json(item); }
+ }
+}
+route("GET","/users/me","identity");
+route("GET","/services","services");
+route("GET","/incidents","incidents");
+route("POST","/incidents","create");
+route("GET","/incidents/{id}","get");
+
+end _lmcode_
+savedsl(p,ARGV[0]);

@@ -262,3 +262,15 @@ With n8n 2.45.4 installed separately, `node scripts/verify-n8n-oauth.mjs` starts
 isolated n8n instance and verifies header-auth, body-auth and PKCE authorization
 flows against lmmock. It uses fresh temporary state and loopback ports 5556,
 5678 and 5679, then cleans up both processes and state.
+
+
+The shared service contract suites also cover PagerDuty (Token authentication,
+identity, services and paged incident create/read), Datadog (API/application keys,
+validation and monitor create/read/pages), and Linear (raw API key or OAuth Bearer,
+issues/teams pagination and issue create/read at `/graphql`). `npm test` runs the
+real HTTP CLI against the vendored lmmock fixtures, including authentication and
+fault responses. `scripts/sync-lmmock.mjs` pins the source commit and file hashes.
+These are selected contracts, not complete n8n-node or live-provider coverage;
+Datadog uses n8n's generic HTTP-request credential and Linear uses canned query
+matching. Source provenance and limitations are recorded in
+[lmmock's preset documentation](https://github.com/lmctl-ai/lmmock/blob/main/docs/http-presets.md).

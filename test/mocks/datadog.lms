@@ -1,0 +1,46 @@
+# datadog selected HTTP contracts; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key) && str_starts_with(j.get(key).to_json(), "\"")) { v = j.get(key).as_string(); } return v; }
+
+fn error(x: Exchange, status: int, message: string) -> void { x.status(status); x.json("{\"errors\":[" + json_quote(message) + "]}"); }
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let key = "fixture-key"; let app = "fixture-app-key";
+ if (c.has("apiKey")) { key = field(c,"apiKey"); } if (c.has("appKey")) { app = field(c,"appKey"); }
+ let ok = secure_equal(x.header("DD-API-KEY"),key);
+ if (x.path() != "/api/v1/validate" && !secure_equal(x.header("DD-APPLICATION-KEY"),app)) { ok = false; }
+ if (!ok) { error(x,403,"Forbidden"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); error(x,429,"Too many requests"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; error(x,500,"Internal Server Error"); }
+ return ok;
+}
+@validate
+fn validate(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"valid\":true}"); } }
+@list
+fn list(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.query("page") == "1") { x.json("[{\"id\":102,\"name\":\"Second monitor\",\"type\":\"metric alert\",\"query\":\"avg(last_5m):avg:system.cpu.user{*} > 90\"}]"); }
+  else if (x.query("page") != "" && x.query("page") != "0") { x.json("[]"); }
+  else { x.json("[{\"id\":101,\"name\":\"First monitor\",\"type\":\"metric alert\",\"query\":\"avg(last_5m):avg:system.cpu.user{*} > 80\"}]"); }
+ }
+}
+@create
+fn create(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (field(b,"name") == "" || field(b,"type") == "" || field(b,"query") == "") { error(x,400,"Missing required monitor fields"); }
+  else {
+   let id = 1000 + x.increment("datadog:ids");
+   let item = "{\"id\":" + str(id) + ",\"name\":" + json_quote(field(b,"name")) + ",\"type\":" + json_quote(field(b,"type")) + ",\"query\":" + json_quote(field(b,"query")) + ",\"overall_state\":\"OK\"}";
+   x.set("datadog:" + str(id),item); x.json(item);
+  }
+ }
+}
+@get
+fn get(x: Exchange) -> void implements Handler { if (allowed(x)) { let item = x.get("datadog:" + x.param("id")); if (item == "") { error(x,404,"Monitor not found"); } else { x.json(item); } } }
+route("GET","/api/v1/validate","validate");
+route("GET","/api/v1/monitor","list");
+route("POST","/api/v1/monitor","create");
+route("GET","/api/v1/monitor/{id}","get");
+
+end _lmcode_
+savedsl(p,ARGV[0]);

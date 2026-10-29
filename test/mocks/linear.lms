@@ -1,0 +1,39 @@
+# linear selected HTTP contracts; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key) && str_starts_with(j.get(key).to_json(), "\"")) { v = j.get(key).as_string(); } return v; }
+
+fn error(x: Exchange, status: int, code: string, message: string) -> void { x.status(status); x.json("{\"errors\":[{\"message\":" + json_quote(message) + ",\"extensions\":{\"code\":" + json_quote(code) + ",\"userPresentableMessage\":" + json_quote(message) + "}}]}"); }
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let key = "fixture-key"; let token = "fixture-token";
+ if (c.has("apiKey")) { key = field(c,"apiKey"); } if (c.has("token")) { token = field(c,"token"); }
+ let auth = x.header("Authorization"); let ok = secure_equal(auth,key) || secure_equal(auth,"Bearer " + token);
+ if (!ok) { error(x,401,"AUTHENTICATION_ERROR","Authentication required"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); error(x,429,"RATELIMITED","Rate limit exceeded"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; error(x,500,"INTERNAL_SERVER_ERROR","Internal server error"); }
+ return ok;
+}
+@graphql
+fn graphql(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body()); let query = field(b,"query"); let vars = json_parse("{}"); if (b.has("variables")) { vars = b.get("variables"); }
+  if (str_contains(query,"issueCreate(")) {
+   if (field(vars,"title") == "" || field(vars,"teamId") == "") { error(x,400,"BAD_USER_INPUT","title and teamId are required"); }
+   else {
+    let id = "created-" + str(x.increment("linear:ids"));
+    let item = "{\"id\":" + json_quote(id) + ",\"identifier\":\"FIX-100\",\"title\":" + json_quote(field(vars,"title")) + ",\"team\":{\"id\":" + json_quote(field(vars,"teamId")) + "},\"description\":" + json_quote(field(vars,"description")) + "}";
+    x.set("linear:" + id,item); x.json("{\"data\":{\"issueCreate\":{\"success\":true,\"issue\":" + item + "}}}");
+   }
+  } else if (str_contains(query,"issues (") || str_contains(query,"issues(")) {
+   if (field(vars,"after") == "page2") { x.json("{\"data\":{\"issues\":{\"nodes\":[{\"id\":\"issue-2\",\"identifier\":\"FIX-2\",\"title\":\"Second issue\"}],\"pageInfo\":{\"hasNextPage\":false,\"endCursor\":\"end\"}}}}"); }
+   else { x.json("{\"data\":{\"issues\":{\"nodes\":[{\"id\":\"issue-1\",\"identifier\":\"FIX-1\",\"title\":\"First issue\"}],\"pageInfo\":{\"hasNextPage\":true,\"endCursor\":\"page2\"}}}}"); }
+  } else if (str_contains(query,"issue(")) {
+   let item = x.get("linear:" + field(vars,"issueId"));
+   if (item == "") { error(x,200,"ENTITY_NOT_FOUND","Issue not found"); } else { x.json("{\"data\":{\"issue\":" + item + "}}"); }
+  } else if (str_contains(query,"teams (") || str_contains(query,"teams(")) { x.json("{\"data\":{\"teams\":{\"nodes\":[{\"id\":\"team-fixture\",\"name\":\"Fixture Team\"}],\"pageInfo\":{\"hasNextPage\":false,\"endCursor\":null}}}}"); }
+  else { error(x,400,"GRAPHQL_VALIDATION_FAILED","Unsupported fixture query"); }
+ }
+}
+route("POST","/graphql","graphql");
+
+end _lmcode_
+savedsl(p,ARGV[0]);

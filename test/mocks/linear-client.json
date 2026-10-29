@@ -1,0 +1,225 @@
+{
+  "steps": [
+    {
+      "name": "n8n credential test getIssues",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "data.issues.nodes.0.id": "issue-1",
+        "data.issues.pageInfo.hasNextPage": true
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}",
+        "variables": {
+          "first": 1
+        }
+      },
+      "capture": {
+        "cursor": "data.issues.pageInfo.endCursor"
+      }
+    },
+    {
+      "name": "issues final page",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "data.issues.nodes.0.id": "issue-2",
+        "data.issues.pageInfo.hasNextPage": false
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}",
+        "variables": {
+          "first": 50,
+          "after": "${cursor}"
+        }
+      }
+    },
+    {
+      "name": "teams via OAuth bearer",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "data.teams.nodes.0.id": "team-fixture",
+        "data.teams.pageInfo.hasNextPage": false
+      },
+      "body": {
+        "query": "query Teams ($first: Int, $after: String){\n\t\t\t\tteams (first: $first, after: $after){\n\t\t\t\t\tnodes {\n\t\t\t\t\t\tid\n\t\t\t\t\t\tname\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t}}",
+        "variables": {
+          "first": 50
+        }
+      }
+    },
+    {
+      "name": "create issue",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "data.issueCreate.success": true,
+        "data.issueCreate.issue.title": "Fix \"héllo\""
+      },
+      "body": {
+        "query": "mutation IssueCreate (\n\t\t\t$title: String!,\n\t\t\t$teamId: String!,\n\t\t\t$description: String,\n\t\t\t$assigneeId: String,\n\t\t\t$priorityId: Int,\n\t\t\t$stateId: String){\n\t\t\tissueCreate(\n\t\t\t\tinput: {\n\t\t\t\t\ttitle: $title\n\t\t\t\t\tdescription: $description\n\t\t\t\t\tteamId: $teamId\n\t\t\t\t\tassigneeId: $assigneeId\n\t\t\t\t\tpriority: $priorityId\n\t\t\t\t\tstateId: $stateId\n\t\t\t\t}\n\t\t\t) {\n\t\t\t\tsuccess\n\t\t\t\t\tissue {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}",
+        "variables": {
+          "title": "Fix \"héllo\"",
+          "teamId": "team-fixture"
+        }
+      },
+      "capture": {
+        "id": "data.issueCreate.issue.id"
+      }
+    },
+    {
+      "name": "read created issue",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "data.issue.id": "${id}",
+        "data.issue.title": "Fix \"héllo\""
+      },
+      "body": {
+        "query": "query Issue($issueId: String!) {\n\t\t\tissue(id: $issueId) {\n\t\t\t\tid,\n\t\t\t\tidentifier,\n\t\t\t\ttitle,\n\t\t\t\tpriority,\n\t\t\t\tarchivedAt,\n\t\t\t\tassignee {\n\t\t\t\t\tid,\n\t\t\t\t\tdisplayName,\n\t\t\t\t\temail\n\t\t\t\t}\n\t\t\t\tstate {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t\tcreatedAt\n\t\t\t\tcreator {\n\t\t\t\t\tid\n\t\t\t\t\tdisplayName\n\t\t\t\t\temail\n\t\t\t\t}\n\t\t\t\tteam {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t\tdescription\n\t\t\t\tdueDate\n\t\t\t\tcycle {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+        "variables": {
+          "issueId": "${id}"
+        }
+      }
+    },
+    {
+      "name": "missing issue is GraphQL error",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "errors.0.extensions.code": "ENTITY_NOT_FOUND"
+      },
+      "body": {
+        "query": "query Issue($issueId: String!) {\n\t\t\tissue(id: $issueId) {\n\t\t\t\tid,\n\t\t\t\tidentifier,\n\t\t\t\ttitle,\n\t\t\t\tpriority,\n\t\t\t\tarchivedAt,\n\t\t\t\tassignee {\n\t\t\t\t\tid,\n\t\t\t\t\tdisplayName,\n\t\t\t\t\temail\n\t\t\t\t}\n\t\t\t\tstate {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t\tcreatedAt\n\t\t\t\tcreator {\n\t\t\t\t\tid\n\t\t\t\t\tdisplayName\n\t\t\t\t\temail\n\t\t\t\t}\n\t\t\t\tteam {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t\tdescription\n\t\t\t\tdueDate\n\t\t\t\tcycle {\n\t\t\t\t\tid\n\t\t\t\t\tname\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+        "variables": {
+          "issueId": "absent"
+        }
+      }
+    },
+    {
+      "name": "invalid issue",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "errors.0.extensions.code": "BAD_USER_INPUT"
+      },
+      "body": {
+        "query": "mutation IssueCreate (\n\t\t\t$title: String!,\n\t\t\t$teamId: String!,\n\t\t\t$description: String,\n\t\t\t$assigneeId: String,\n\t\t\t$priorityId: Int,\n\t\t\t$stateId: String){\n\t\t\tissueCreate(\n\t\t\t\tinput: {\n\t\t\t\t\ttitle: $title\n\t\t\t\t\tdescription: $description\n\t\t\t\t\tteamId: $teamId\n\t\t\t\t\tassigneeId: $assigneeId\n\t\t\t\t\tpriority: $priorityId\n\t\t\t\t\tstateId: $stateId\n\t\t\t\t}\n\t\t\t) {\n\t\t\t\tsuccess\n\t\t\t\t\tissue {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}",
+        "variables": {}
+      },
+      "status": 400
+    },
+    {
+      "name": "unsupported query",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key"
+      },
+      "json": {
+        "errors.0.extensions.code": "GRAPHQL_VALIDATION_FAILED"
+      },
+      "body": {
+        "query": "query { unsupported }"
+      },
+      "status": 400
+    },
+    {
+      "name": "missing auth",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {},
+      "json": {
+        "errors.0.extensions.code": "AUTHENTICATION_ERROR"
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"
+      },
+      "status": 401
+    },
+    {
+      "name": "wrong API key",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "wrong"
+      },
+      "json": {
+        "errors.0.extensions.code": "AUTHENTICATION_ERROR"
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"
+      },
+      "status": 401
+    },
+    {
+      "name": "wrong OAuth token",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "json": {
+        "errors.0.extensions.code": "AUTHENTICATION_ERROR"
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"
+      },
+      "status": 401
+    },
+    {
+      "name": "fault 429",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "errors.0.extensions.code": "RATELIMITED"
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"
+      },
+      "status": 429
+    },
+    {
+      "name": "fault 500",
+      "method": "POST",
+      "path": "/graphql",
+      "headers": {
+        "Authorization": "fixture-key",
+        "X-Lmmock-Fault": "500"
+      },
+      "json": {
+        "errors.0.extensions.code": "INTERNAL_SERVER_ERROR"
+      },
+      "body": {
+        "query": "query Issue ($first: Int, $after: String){\n\t\t\t\t\tissues (first: $first, after: $after){\n\t\t\t\t\t\tnodes {\n\t\t\t\t\t\tid,\n\t\t\t\t\t\tidentifier,\n\t\t\t\t\t\ttitle,\n\t\t\t\t\t\tpriority\n\t\t\t\t\t\tarchivedAt\n\t\t\t\t\t\tassignee {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tstate {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tcreatedAt\n\t\t\t\t\t\tcreator {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tdisplayName\n\t\t\t\t\t\t\temail\n\t\t\t\t\t\t}\n\t\t\t\t\t\tteam {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t\tdescription\n\t\t\t\t\t\tdueDate\n\t\t\t\t\t\tcycle {\n\t\t\t\t\t\t\tid\n\t\t\t\t\t\t\tname\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tpageInfo {\n\t\t\t\t\t\thasNextPage\n\t\t\t\t\t\tendCursor\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}"
+      },
+      "status": 500
+    }
+  ]
+}

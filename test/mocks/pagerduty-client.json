@@ -1,0 +1,207 @@
+{
+  "steps": [
+    {
+      "name": "identity user",
+      "method": "GET",
+      "path": "/users/me",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "user.id": "PFIXTURE"
+      }
+    },
+    {
+      "name": "service options",
+      "method": "GET",
+      "path": "/services",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "services.0.id": "PSERVICE",
+        "more": false
+      }
+    },
+    {
+      "name": "incidents first page",
+      "method": "GET",
+      "path": "/incidents?limit=100&offset=0",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "incidents.0.id": "PFIRST",
+        "more": true,
+        "offset": 0
+      }
+    },
+    {
+      "name": "incidents final page",
+      "method": "GET",
+      "path": "/incidents?limit=100&offset=100",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "incidents.0.id": "PSECOND",
+        "more": false,
+        "offset": 100
+      }
+    },
+    {
+      "name": "create incident",
+      "method": "POST",
+      "path": "/incidents",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2",
+        "From": "user@example.test"
+      },
+      "json": {
+        "incident.title": "CPU \"héllo\"",
+        "incident.status": "triggered"
+      },
+      "body": {
+        "incident": {
+          "type": "incident",
+          "title": "CPU \"héllo\"",
+          "service": {
+            "id": "PSERVICE",
+            "type": "service_reference"
+          }
+        }
+      },
+      "status": 201,
+      "capture": {
+        "id": "incident.id"
+      }
+    },
+    {
+      "name": "read created incident",
+      "method": "GET",
+      "path": "/incidents/${id}",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "incident.id": "${id}",
+        "incident.title": "CPU \"héllo\"",
+        "incident.service.id": "PSERVICE"
+      }
+    },
+    {
+      "name": "missing incident",
+      "method": "GET",
+      "path": "/incidents/absent",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "error.code": 2100
+      },
+      "status": 404
+    },
+    {
+      "name": "invalid incident",
+      "method": "POST",
+      "path": "/incidents",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2",
+        "From": "user@example.test"
+      },
+      "json": {
+        "error.code": 2001
+      },
+      "body": {
+        "incident": {}
+      },
+      "status": 400
+    },
+    {
+      "name": "missing From",
+      "method": "POST",
+      "path": "/incidents",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2"
+      },
+      "json": {
+        "error.code": 2001
+      },
+      "body": {
+        "incident": {}
+      },
+      "status": 400
+    },
+    {
+      "name": "missing token",
+      "method": "GET",
+      "path": "/users/me",
+      "headers": {},
+      "json": {
+        "error.code": 2006
+      },
+      "status": 401
+    },
+    {
+      "name": "wrong token",
+      "method": "GET",
+      "path": "/users/me",
+      "headers": {
+        "Authorization": "Token token=wrong"
+      },
+      "json": {
+        "error.code": 2006
+      },
+      "status": 401
+    },
+    {
+      "name": "wrong bearer scheme",
+      "method": "GET",
+      "path": "/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "error.code": 2006
+      },
+      "status": 401
+    },
+    {
+      "name": "fault 429",
+      "method": "GET",
+      "path": "/services",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2",
+        "X-Lmmock-Fault": "429"
+      },
+      "json": {
+        "error.code": 2020
+      },
+      "status": 429
+    },
+    {
+      "name": "fault 500",
+      "method": "GET",
+      "path": "/services",
+      "headers": {
+        "Authorization": "Token token=fixture-token",
+        "Accept": "application/vnd.pagerduty+json;version=2",
+        "X-Lmmock-Fault": "500"
+      },
+      "json": {
+        "error.code": 2000
+      },
+      "status": 500
+    }
+  ]
+}
