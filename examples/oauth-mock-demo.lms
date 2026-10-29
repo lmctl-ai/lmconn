@@ -1,0 +1,61 @@
+# Chapter: lmconnectors - local OAuth2 authorization from start to finish
+# Shows: parallel mock IdP and client, PKCE authorization, status, and authenticated HTTP
+# Run: lmscript examples/oauth-mock-demo.lms
+# Needs: lmconn and node on PATH; run from the repo root with ports 5557/5558 free; no credentials
+# exit: 0
+if (which("lmconn") == null) {
+  println("SKIPPED: lmconn is not on PATH (run `npm link` in lmconnectors)");
+  exit(0);
+}
+if (which("node") == null) {
+  println("SKIPPED: node is not on PATH");
+  exit(0);
+}
+
+fn call(argv) {
+  r = system(argv, 35000);
+  if (r.timed_out) { return {ok: false, error: "lmconn timed out"}; }
+  env = json_parse(r.stdout);
+  if (!env.ok) {
+    return {ok: false, error: "lmconn failed (exit " + str(r.code) + "): " + env.error.code + ": " + env.error.message};
+  }
+  return {ok: true, result: env.result};
+}
+
+fn client_flow(db) {
+  # set_env is isolated to this parallel branch and inherited by its child processes.
+  set_env("LMCONN_DB", db);
+  set_env("DEMO_API_KEY", null);
+  sleep_ms(800);
+  authorized = call(["lmconn", "oauth", "authorize", "demo", "--client-id", "demo-client", "--client-secret", "demo-secret", "--auth-url", "http://127.0.0.1:5557/authorize", "--token-url", "http://127.0.0.1:5557/token", "--port", "5558", "--auto-follow", "--timeout", "30000"]);
+  if (!authorized.ok) { return authorized; }
+  status = call(["lmconn", "oauth", "status", "demo"]);
+  if (!status.ok) { return status; }
+  if (!status.result.authorized) { return {ok: false, error: "OAuth status is not authorized"}; }
+  user = call(["lmconn", "http", "request", "http://127.0.0.1:5557/api/userinfo", "--auth", "demo"]);
+  if (!user.ok) { return user; }
+  if (!user.result.ok) { return {ok: false, error: "userinfo returned HTTP " + str(user.result.status)}; }
+  return {ok: true, status: status.result, userinfo: user.result.bodyJson};
+}
+
+# temp_file reserves a private file; SQLite initializes it in the client branch.
+db = temp_file();
+results = parallel([
+  system(["node", "scripts/mock-idp.js", "--port", "5557", "--once"], 60000),
+  client_flow(db)
+]);
+# Every child has exited before deleting the database (including Windows).
+delete_file(db);
+delete_file(db + "-wal");
+delete_file(db + "-shm");
+
+server = results[0];
+client = results[1];
+# Do not echo the mock server's startup output or any authorization URL.
+if (!client.ok) { println(client.error); exit(1); }
+if (server.timed_out || server.code != 0) {
+  println("Mock IdP failed or timed out; check that ports 5557 and 5558 are free.");
+  exit(1);
+}
+println("OAuth authorized: " + str(client.status.authorized) + "; expires: " + str(client.status.expiresAt));
+println("userinfo: " + json_stringify(client.userinfo));
