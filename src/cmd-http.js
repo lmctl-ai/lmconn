@@ -1,12 +1,12 @@
 // Generic HTTP connector (the n8n "HTTP Request" node as a CLI):
 //   lmconn http request <url> [--method M] [--header "K: V"]... [--data S | --data-file P]
 //                       [--auth SERVICE] [--timeout MS]
-// --auth SERVICE resolves getCred(SERVICE, 'api_key'), then $<SERVICE>_API_KEY, and
+// --auth SERVICE resolves store api_key, then $<SERVICE>_API_KEY, then OAuth (refreshing when expired), and
 // sends it as `Authorization: Bearer`. The key never appears on stdout or stderr.
 
 import { readFile } from 'node:fs/promises';
 import { emit, ok, emitFail } from './result.js';
-import { getCred } from './creds.js';
+import { getCred, setCred, deleteCred } from './creds.js';
 
 const USAGE = 'usage: lmconn http request <url> [--method GET|POST|...] [--header "K: V"]... ' +
   '[--data STRING | --data-file PATH] [--auth SERVICE] [--timeout MS]';
@@ -20,7 +20,7 @@ export const ops = [
     { name: 'header', type: 'array', items: 'string', occurs: '*', description: 'Request header as "Name: value" (repeatable)' },
     { name: 'data', type: 'string', occurs: '?', description: 'Request body (sets Content-Type application/json when it parses as JSON)' },
     { name: 'dataFile', type: 'string', occurs: '?', description: 'Read the request body from a file' },
-    { name: 'auth', type: 'string', occurs: '?', description: 'Credential service whose api_key is sent as Authorization: Bearer' },
+    { name: 'auth', type: 'string', occurs: '?', description: 'Credential service whose API key or OAuth access token is sent as Authorization: Bearer' },
     { name: 'timeout', type: 'number', occurs: '?', default: 30000, description: 'Timeout in milliseconds' },
   ] },
 ];
@@ -30,12 +30,60 @@ export function envNameFor(service) {
   return service.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_API_KEY';
 }
 
-export function resolveAuth(service) {
+const reconnect = service => Object.assign(new Error(`OAuth authorization expired or revoked; run \`lmconn oauth authorize ${service}\` again`), { code: 'RECONNECT' });
+const refreshFailure = () => Object.assign(new Error('OAuth token refresh failed'), { code: 'OAUTH_REFRESH' });
+
+// No dependency on cmd-oauth: the shared contract is the oauth_* credential fields.
+export async function refreshOAuth(service, fetchImpl = globalThis.fetch, timeoutMs = 30000) {
+  const read = field => getCred(service, `oauth_${field}`);
+  const refreshToken = read('refresh_token');
+  if (!refreshToken) throw reconnect(service);
+  const tokenUrl = read('token_url');
+  const clientId = read('client_id');
+  const clientSecret = read('client_secret') ?? '';
+  const style = read('auth_style') || 'header';
+  if (!tokenUrl || !clientId || !['header', 'body'].includes(style)) throw refreshFailure();
+  const form = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken });
+  const headers = { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' };
+  if (style === 'header') headers.authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+  else { form.set('client_id', clientId); form.set('client_secret', clientSecret); }
+  let response; let data;
+  try {
+    response = await fetchImpl(tokenUrl, { method: 'POST', headers, body: form.toString(),
+      redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
+    data = await response.json();
+  } catch { throw refreshFailure(); }
+  if (data?.error === 'invalid_grant') throw reconnect(service);
+  if (!response.ok || data?.error || typeof data?.access_token !== 'string' || !data.access_token) throw refreshFailure();
+  let expiresAt = null;
+  if (data.expires_in !== undefined) {
+    const seconds = Number(data.expires_in);
+    const expiry = Date.now() + seconds * 1000;
+    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(new Date(expiry).getTime())) throw refreshFailure();
+    expiresAt = new Date(expiry).toISOString();
+  }
+  setCred(service, 'oauth_access_token', data.access_token);
+  if (typeof data.refresh_token === 'string' && data.refresh_token) setCred(service, 'oauth_refresh_token', data.refresh_token);
+  if (expiresAt) setCred(service, 'oauth_expires_at', expiresAt);
+  else deleteCred(service, 'oauth_expires_at'); // A new token without a lifetime must not retain the old expired timestamp.
+  if (typeof data.token_type === 'string') setCred(service, 'oauth_token_type', data.token_type);
+  if (typeof data.scope === 'string') setCred(service, 'oauth_scope', data.scope);
+  return data.access_token;
+}
+
+export async function resolveAuth(service, fetchImpl = globalThis.fetch, timeoutMs = 30000) {
   const stored = getCred(service, 'api_key');
   if (stored) return stored;
   const fromEnv = process.env[envNameFor(service)];
   if (fromEnv) return fromEnv;
-  return null;
+  const accessToken = getCred(service, 'oauth_access_token');
+  if (!accessToken) return null;
+  const expiry = getCred(service, 'oauth_expires_at');
+  if (expiry && (!Number.isFinite(Date.parse(expiry)) || Date.parse(expiry) <= Date.now())) {
+    if (!getCred(service, 'oauth_refresh_token')) throw reconnect(service);
+    return refreshOAuth(service, fetchImpl, timeoutMs);
+  }
+  return accessToken;
 }
 
 export function parseArgs(args) {
@@ -81,6 +129,8 @@ function headerPairs(list) {
 // Performs the request. `fetchImpl` is injectable for tests.
 export async function request(req, fetchImpl = globalThis.fetch) {
   const headers = new Headers(headerPairs(req.headers));
+  const secrets = [];
+  const redact = value => secrets.reduce((text, secret) => text.split(secret).join('[REDACTED]'), String(value));
   let body = req.data;
   if (req.dataFile !== undefined) body = await readFile(req.dataFile, 'utf8');
   const method = req.method || (body !== undefined ? 'POST' : 'GET');
@@ -90,10 +140,17 @@ export async function request(req, fetchImpl = globalThis.fetch) {
     headers.set('content-type', isJson ? 'application/json' : 'text/plain; charset=utf-8');
   }
   if (req.auth !== undefined) {
-    const key = resolveAuth(req.auth);
-    if (!key) {
-      throw Object.assign(new Error(`no api_key for service ${req.auth}: run \`lmconn cred set ${req.auth} api_key --env ${envNameFor(req.auth)}\` or export ${envNameFor(req.auth)}`), { code: 'MISSING_KEY' });
+    for (const field of ['api_key', 'oauth_access_token', 'oauth_refresh_token', 'oauth_client_secret']) {
+      const value = getCred(req.auth, field);
+      if (value) secrets.push(value);
     }
+    const key = await resolveAuth(req.auth, fetchImpl, req.timeout);
+    if (!key) {
+      throw Object.assign(new Error(`no API key or OAuth token for service ${req.auth}: run \`lmconn cred set ${req.auth} api_key --env ${envNameFor(req.auth)}\` or \`lmconn oauth authorize ${req.auth}\``), { code: 'MISSING_KEY' });
+    }
+    secrets.push(key);
+    const rotated = getCred(req.auth, 'oauth_refresh_token');
+    if (rotated) secrets.push(rotated);
     headers.set('authorization', `Bearer ${key}`);
   }
   if (!headers.has('accept')) headers.set('accept', 'application/json, text/*;q=0.9, */*;q=0.8');
@@ -106,7 +163,7 @@ export async function request(req, fetchImpl = globalThis.fetch) {
     });
   } catch (err) {
     const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-    throw Object.assign(new Error(timedOut ? `request timed out after ${req.timeout} ms` : `request failed: ${err?.cause?.message || err?.message || err}`),
+    throw Object.assign(new Error(timedOut ? `request timed out after ${req.timeout} ms` : `request failed: ${redact(err?.cause?.message || err?.message || err)}`),
       { code: timedOut ? 'TIMEOUT' : 'NETWORK' });
   }
   const text = await response.text();
@@ -118,7 +175,14 @@ export async function request(req, fetchImpl = globalThis.fetch) {
     try { bodyJson = JSON.parse(text); } catch { /* not JSON */ }
   }
   if (bodyJson !== undefined) result.bodyJson = bodyJson; else result.bodyText = text;
-  return result;
+  // An echo service may return the Authorization header; redact credential values there too.
+  const sanitize = value => {
+    if (typeof value === 'string') return redact(value);
+    if (Array.isArray(value)) return value.map(sanitize);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [redact(k), sanitize(v)]));
+    return value;
+  };
+  return sanitize(result);
 }
 
 export async function run(args, deps = {}) {
@@ -127,7 +191,7 @@ export async function run(args, deps = {}) {
     emit(ok(await request(req, deps.fetch)));
     return 0;
   } catch (err) {
-    const known = ['USAGE', 'MISSING_KEY', 'TIMEOUT', 'NETWORK'];
+    const known = ['USAGE', 'MISSING_KEY', 'TIMEOUT', 'NETWORK', 'RECONNECT', 'OAUTH_REFRESH'];
     if (known.includes(err.code)) return emitFail(err.code, err.message);
     if (err.code === 'ENOENT') return emitFail('USAGE', `cannot read --data-file: ${err.path}`);
     return emitFail('HTTP_ERROR', `http request failed: ${err.message}`);

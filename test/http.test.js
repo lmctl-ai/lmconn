@@ -5,20 +5,29 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run, parseArgs, envNameFor } from '../src/cmd-http.js';
-import { setCred, closeDb } from '../src/creds.js';
+import { setCred, getCred, closeDb } from '../src/creds.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'lmconn-http-test-'));
 const originalDb = process.env.LMCONN_DB;
 process.env.LMCONN_DB = join(directory, 'creds.db');
 
 let server; let base; let last;
+let refreshCalls = 0; let tokenRequest; let tokenReply; let tokenStatus = 200;
 before(async () => {
   server = createServer((req, res) => {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
       last = { method: req.method, url: req.url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') };
-      if (req.url === '/json') {
+      if (req.url === '/token') {
+        refreshCalls++;
+        tokenRequest = last;
+        res.writeHead(tokenStatus, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(tokenReply));
+      } else if (req.url === '/echo-auth') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ authorization: req.headers.authorization }));
+      } else if (req.url === '/json') {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ hello: 'world', echo: last.headers['x-echo'] ?? null }));
       } else if (req.url === '/text') {
@@ -163,4 +172,118 @@ test('ops fragment names the http_request operation', async () => {
   const { ops } = await import('../src/cmd-http.js');
   assert.equal(ops[0].name, 'http_request');
   assert.ok(ops[0].params.some((p) => p.name === 'url' && p.positional === true));
+});
+
+function seedOAuth(service, { expired = true, refresh = true, style = 'header' } = {}) {
+  const values = {
+    oauth_access_token: 'oauth-old-private',
+    oauth_expires_at: new Date(Date.now() + (expired ? -60000 : 3600000)).toISOString(),
+    oauth_token_url: `${base}/token`, oauth_client_id: 'client-id',
+    oauth_client_secret: 'client-private', oauth_auth_style: style,
+  };
+  if (refresh) values.oauth_refresh_token = 'refresh-private';
+  for (const [field, value] of Object.entries(values)) setCred(service, field, value);
+  refreshCalls = 0;
+  tokenStatus = 200;
+  tokenReply = { access_token: 'oauth-fresh-private', expires_in: 3600, token_type: 'Bearer' };
+}
+function assertNoSecrets(result) {
+  for (const secret of ['oauth-old-private', 'oauth-fresh-private', 'refresh-private', 'rotated-private', 'client-private']) {
+    assert.ok(!result.stdout.includes(secret));
+    assert.ok(!result.stderr.includes(secret));
+  }
+}
+
+test('valid OAuth token is used without refresh and echoed credentials are redacted', async () => {
+  seedOAuth('oauth-valid', { expired: false });
+  const r = await capture(['request', `${base}/echo-auth`, '--auth', 'oauth-valid']);
+  assert.equal(r.code, 0);
+  assert.equal(last.headers.authorization, 'Bearer oauth-old-private');
+  assert.equal(refreshCalls, 0);
+  assert.equal(r.envelope.result.bodyJson.authorization, 'Bearer [REDACTED]');
+  assertNoSecrets(r);
+});
+
+test('expired OAuth token refreshes once with Basic auth and retains refresh token', async () => {
+  seedOAuth('oauth-header');
+  const before = Date.now();
+  const r = await capture(['request', `${base}/json`, '--auth', 'oauth-header']);
+  assert.equal(r.code, 0);
+  assert.equal(refreshCalls, 1);
+  assert.equal(tokenRequest.method, 'POST');
+  assert.equal(tokenRequest.headers.authorization, `Basic ${Buffer.from('client-id:client-private').toString('base64')}`);
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(tokenRequest.body)), { grant_type: 'refresh_token', refresh_token: 'refresh-private' });
+  assert.equal(last.headers.authorization, 'Bearer oauth-fresh-private');
+  assert.equal(getCred('oauth-header', 'oauth_refresh_token'), 'refresh-private');
+  assert.equal(getCred('oauth-header', 'oauth_access_token'), 'oauth-fresh-private');
+  assert.equal(getCred('oauth-header', 'oauth_token_type'), 'Bearer');
+  assert.ok(Date.parse(getCred('oauth-header', 'oauth_expires_at')) >= before + 3600000);
+  assertNoSecrets(r);
+  assert.equal((await capture(['request', `${base}/json`, '--auth', 'oauth-header'])).code, 0);
+  assert.equal(refreshCalls, 1);
+});
+
+test('body client auth rotates refresh tokens and stores new scope', async () => {
+  seedOAuth('oauth-body', { style: 'body' });
+  tokenReply.refresh_token = 'rotated-private';
+  tokenReply.scope = 'read';
+  const r = await capture(['request', `${base}/json`, '--auth', 'oauth-body']);
+  assert.equal(r.code, 0);
+  assert.equal(tokenRequest.headers.authorization, undefined);
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(tokenRequest.body)), {
+    grant_type: 'refresh_token', refresh_token: 'refresh-private', client_id: 'client-id', client_secret: 'client-private',
+  });
+  assert.equal(getCred('oauth-body', 'oauth_refresh_token'), 'rotated-private');
+  assert.equal(getCred('oauth-body', 'oauth_scope'), 'read');
+  assertNoSecrets(r);
+});
+
+test('invalid_grant or expired token without refresh requires reconnect', async () => {
+  for (const refresh of [true, false]) {
+    const service = `oauth-reconnect-${refresh}`;
+    seedOAuth(service, { refresh });
+    tokenStatus = 400;
+    tokenReply = { error: 'invalid_grant', error_description: 'refresh-private client-private' };
+    const r = await capture(['request', `${base}/json`, '--auth', service]);
+    assert.equal(r.code, 1);
+    assert.equal(r.envelope.error.code, 'RECONNECT');
+    assert.ok(r.envelope.error.message.includes(`lmconn oauth authorize ${service}`));
+    assert.equal(refreshCalls, refresh ? 1 : 0);
+    assert.equal(getCred(service, 'oauth_access_token'), 'oauth-old-private');
+    assertNoSecrets(r);
+  }
+});
+
+test('API key precedence is store, environment, then OAuth without unnecessary refresh', async () => {
+  seedOAuth('oauth-precedence');
+  setCred('oauth-precedence', 'api_key', 'stored-api-private');
+  const original = process.env.OAUTH_PRECEDENCE_API_KEY;
+  process.env.OAUTH_PRECEDENCE_API_KEY = 'env-api-private';
+  try {
+    const stored = await capture(['request', `${base}/json`, '--auth', 'oauth-precedence']);
+    assert.equal(stored.code, 0);
+    assert.equal(last.headers.authorization, 'Bearer stored-api-private');
+    setCred('oauth-precedence', 'api_key', '');
+    const env = await capture(['request', `${base}/json`, '--auth', 'oauth-precedence']);
+    assert.equal(env.code, 0);
+    assert.equal(last.headers.authorization, 'Bearer env-api-private');
+    assert.equal(refreshCalls, 0);
+  } finally {
+    if (original === undefined) delete process.env.OAUTH_PRECEDENCE_API_KEY;
+    else process.env.OAUTH_PRECEDENCE_API_KEY = original;
+  }
+});
+
+test('refresh failures do not leak token endpoint details or mutate stored tokens', async () => {
+  seedOAuth('oauth-failure');
+  tokenStatus = 500;
+  tokenReply = { error: 'server_error', error_description: 'refresh-private client-private' };
+  const r = await capture(['request', `${base}/json`, '--auth', 'oauth-failure']);
+  assert.equal(r.code, 1);
+  assert.equal(r.envelope.error.code, 'OAUTH_REFRESH');
+  assert.equal(getCred('oauth-failure', 'oauth_access_token'), 'oauth-old-private');
+  assertNoSecrets(r);
+  const missing = await capture(['request', `${base}/json`, '--auth', 'oauth-absent']);
+  assert.match(missing.envelope.error.message, /lmconn cred set oauth-absent api_key/);
+  assert.match(missing.envelope.error.message, /lmconn oauth authorize oauth-absent/);
 });
