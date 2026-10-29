@@ -1,0 +1,101 @@
+# typeform HTTP subset (api.typeform.com) for n8n integration tests. Synthetic credentials only.
+# n8n: credentials/TypeformApi.credentials.ts sends "Authorization: bearer <token>" (lowercase scheme)
+# and tests GET /forms; nodes/Typeform/GenericFunctions.ts pages with page/page_size until
+# page_count <= page; TypeformTrigger manages forms/{id}/webhooks/{tag} with PUT {url,enabled,
+# verify_ssl,secret} and DELETE. Error bodies follow Typeform's documented {"code","description"} shape.
+# Config: {"token":"tfp_fixture_typeform_token"}. X-Lmmock-Fault: 429 or 500 after authentication.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { let t = b.get(key).to_json(); if (str_starts_with(t, "\"")) { value = b.get(key).as_string(); } else { value = t; } }
+ } return value;
+}
+fn fail(x: Exchange, status: int, code: string, description: string) -> void { x.status(status); x.json("{\"code\":" + json_quote(code) + ",\"description\":" + json_quote(description) + "}"); }
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "tfp_fixture_typeform_token";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ let auth = x.header("Authorization"); let ok = true;
+ if (auth == "") { ok = false; fail(x, 401, "UNAUTHORIZED", "Authentication credentials not found on the Request Headers"); }
+ else if (!(str_len(auth) > 7 && str_lower(str_substr(auth, 0, 7)) == "bearer " && secure_equal(str_substr(auth, 7, str_len(auth)), token))) { ok = false; fail(x, 401, "UNAUTHORIZED", "Invalid token"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After", "1"); fail(x, 429, "RATE_LIMIT_EXCEEDED", "Too many requests"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; fail(x, 500, "INTERNAL_SERVER_ERROR", "Fixture server failure"); }
+ return ok;
+}
+fn form_summary(id: string, title: string) -> string {
+ return "{\"id\":" + json_quote(id) + ",\"title\":" + json_quote(title) + ",\"last_updated_at\":\"2026-10-29T00:00:00Z\",\"created_at\":\"2026-10-01T00:00:00Z\",\"settings\":{\"is_public\":true},\"self\":{\"href\":\"https://api.typeform.com/forms/" + id + "\"},\"theme\":{\"href\":\"https://api.typeform.com/themes/fixture\"},\"_links\":{\"display\":\"https://fixture.typeform.com/to/" + id + "\",\"responses\":\"https://api.typeform.com/forms/" + id + "/responses\"}}";
+}
+fn known_form(id: string) -> bool { return id == "fxtr001" || id == "fxtr002" || id == "fxtr003"; }
+fn webhook_json(form: string, tag: string, url: string, enabled: string, verify: string) -> string {
+ return "{\"id\":" + json_quote("wh-" + tag) + ",\"form_id\":" + json_quote(form) + ",\"tag\":" + json_quote(tag) + ",\"url\":" + json_quote(url) + ",\"enabled\":" + enabled + ",\"verify_ssl\":" + verify + ",\"secret\":null,\"created_at\":\"2026-10-29T00:00:00Z\",\"updated_at\":\"2026-10-29T00:00:00Z\"}";
+}
+@list_forms
+fn list_forms(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.query("page") == "2") { x.json("{\"total_items\":3,\"page_count\":2,\"items\":[" + form_summary("fxtr003", "Fixture feedback") + "]}"); }
+  else { x.json("{\"total_items\":3,\"page_count\":2,\"items\":[" + form_summary("fxtr001", "Fixture signup") + "," + form_summary("fxtr002", "Fixture survey") + "]}"); }
+ }
+}
+@get_form
+fn get_form(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let id = x.param("form");
+  if (!known_form(id)) { fail(x, 404, "NOT_FOUND", "Non existing form with uid " + id); }
+  else { x.json("{\"id\":" + json_quote(id) + ",\"type\":\"form\",\"title\":\"Fixture signup\",\"workspace\":{\"href\":\"https://api.typeform.com/workspaces/fixture\"},\"settings\":{\"language\":\"en\",\"is_public\":true,\"progress_bar\":\"proportion\"},\"fields\":[{\"id\":\"fld001\",\"title\":\"What is your email?\",\"ref\":\"email\",\"type\":\"email\",\"validations\":{\"required\":true}},{\"id\":\"fld002\",\"title\":\"How did you hear about us?\",\"ref\":\"source\",\"type\":\"short_text\",\"validations\":{\"required\":false}}],\"_links\":{\"display\":\"https://fixture.typeform.com/to/" + id + "\"}}"); }
+ }
+}
+@list_webhooks
+fn list_webhooks(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let form = x.param("form");
+  if (!known_form(form)) { fail(x, 404, "NOT_FOUND", "Non existing form with uid " + form); }
+  else {
+   let items = webhook_json(form, "fixture-tag", "https://hooks.example.test/fixture", "true", "true");
+   let extra = x.get("webhooks:" + form);
+   if (extra != "") { items = items + "," + extra; }
+   x.json("{\"items\":[" + items + "]}");
+  }
+ }
+}
+@put_webhook
+fn put_webhook(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let form = x.param("form"); let tag = x.param("tag"); let url = body_field(x, "url");
+  if (!known_form(form)) { fail(x, 404, "NOT_FOUND", "Non existing form with uid " + form); }
+  else if (url == "") { fail(x, 400, "VALIDATION_ERROR", "url: field is required"); }
+  else {
+   let enabled = body_field(x, "enabled"); if (enabled == "") { enabled = "false"; }
+   let verify = body_field(x, "verify_ssl"); if (verify == "") { verify = "false"; }
+   let item = webhook_json(form, tag, url, enabled, verify);
+   x.set("webhook:" + form + ":" + tag, item);
+   let extra = x.get("webhooks:" + form); if (extra == "") { extra = item; } else { extra = extra + "," + item; }
+   x.set("webhooks:" + form, extra);
+   x.json(item);
+  }
+ }
+}
+@get_webhook
+fn get_webhook(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let form = x.param("form"); let tag = x.param("tag");
+  let item = x.get("webhook:" + form + ":" + tag);
+  if (tag == "fixture-tag" && known_form(form)) { item = webhook_json(form, "fixture-tag", "https://hooks.example.test/fixture", "true", "true"); }
+  if (item == "") { fail(x, 404, "NOT_FOUND", "Webhook not found"); } else { x.json(item); }
+ }
+}
+@delete_webhook
+fn delete_webhook(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let form = x.param("form"); let tag = x.param("tag");
+  let item = x.take("webhook:" + form + ":" + tag);
+  if (item == "" && tag != "fixture-tag") { fail(x, 404, "NOT_FOUND", "Webhook not found"); }
+  else { x.set("webhooks:" + form, ""); x.status(204); }
+ }
+}
+route("GET", "/forms", "list_forms");
+route("GET", "/forms/{form}", "get_form");
+route("GET", "/forms/{form}/webhooks", "list_webhooks");
+route("PUT", "/forms/{form}/webhooks/{tag}", "put_webhook");
+route("GET", "/forms/{form}/webhooks/{tag}", "get_webhook");
+route("DELETE", "/forms/{form}/webhooks/{tag}", "delete_webhook");
+end _lmcode_
+savedsl(p, ARGV[0]);

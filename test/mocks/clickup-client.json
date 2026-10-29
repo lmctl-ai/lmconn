@@ -1,0 +1,208 @@
+{
+  "steps": [
+    {
+      "name": "credential test: teams",
+      "path": "/api/v2/team",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "teams.0.id": "9001",
+        "teams.0.name": "Fixture Workspace",
+        "teams.0.members.0.user.username": "fixture"
+      }
+    },
+    {
+      "name": "spaces of the team",
+      "path": "/api/v2/team/9001/space",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "spaces.0.id": "90010001",
+        "spaces.0.statuses.1.status": "complete"
+      }
+    },
+    {
+      "name": "lists of the space",
+      "path": "/api/v2/space/90010001/list",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "lists.0.id": "901",
+        "lists.0.task_count": 2
+      }
+    },
+    {
+      "name": "tasks page 0",
+      "path": "/api/v2/list/901/task?page=0",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "tasks.0.id": "abc123",
+        "tasks.1.status.status": "complete",
+        "last_page": false
+      }
+    },
+    {
+      "name": "tasks page 1 terminates the n8n loop",
+      "path": "/api/v2/list/901/task?page=1",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "tasks": [],
+        "last_page": true
+      }
+    },
+    {
+      "name": "create task",
+      "method": "POST",
+      "path": "/api/v2/list/901/task",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "body": {
+        "name": "Created by lmmock",
+        "description": "from the suite"
+      },
+      "json": {
+        "name": "Created by lmmock",
+        "description": "from the suite",
+        "status.status": "to do",
+        "list.id": "901"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created task",
+      "path": "/api/v2/task/${id}",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "id": "${id}",
+        "name": "Created by lmmock",
+        "team_id": "9001"
+      }
+    },
+    {
+      "name": "read canned task",
+      "path": "/api/v2/task/abc124",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {
+        "id": "abc124",
+        "status.type": "closed"
+      }
+    },
+    {
+      "name": "delete created task",
+      "method": "DELETE",
+      "path": "/api/v2/task/${id}",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "json": {}
+    },
+    {
+      "name": "deleted task is gone",
+      "path": "/api/v2/task/${id}",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "status": 404,
+      "json": {
+        "ECODE": "ITEM_013"
+      }
+    },
+    {
+      "name": "create without name",
+      "method": "POST",
+      "path": "/api/v2/list/901/task",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "body": {
+        "description": "no name"
+      },
+      "status": 400,
+      "json": {
+        "err": "Task name invalid",
+        "ECODE": "INPUT_005"
+      }
+    },
+    {
+      "name": "unknown list",
+      "path": "/api/v2/list/999/task",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token"
+      },
+      "status": 404,
+      "json": {
+        "ECODE": "ITEM_013"
+      }
+    },
+    {
+      "name": "missing token",
+      "path": "/api/v2/team",
+      "status": 401,
+      "json": {
+        "err": "Authorization header required",
+        "ECODE": "OAUTH_017"
+      }
+    },
+    {
+      "name": "wrong token",
+      "path": "/api/v2/team",
+      "headers": {
+        "Authorization": "pk_wrong"
+      },
+      "status": 401,
+      "json": {
+        "err": "Token invalid",
+        "ECODE": "OAUTH_025"
+      }
+    },
+    {
+      "name": "Bearer prefix is not how ClickUp personal tokens are sent",
+      "path": "/api/v2/team",
+      "headers": {
+        "Authorization": "Bearer pk_fixture_clickup_token"
+      },
+      "status": 401,
+      "json": {
+        "ECODE": "OAUTH_025"
+      }
+    },
+    {
+      "name": "fault: rate limit",
+      "path": "/api/v2/team",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "err": "Rate limit reached"
+      }
+    },
+    {
+      "name": "fault: server error",
+      "path": "/api/v2/team",
+      "headers": {
+        "Authorization": "pk_fixture_clickup_token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "ECODE": "INTERNAL_001"
+      }
+    }
+  ]
+}

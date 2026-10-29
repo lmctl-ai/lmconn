@@ -58,6 +58,10 @@
     "circleci.lms": "53732d3af2af73805df5bbfcda85e778dee2c6b15a6ad94971d30103924cfadb",
     "circleci-client.json": "f53f7d8c6c75b4ad0385fb69e12c379255e66f3f4a7e9555e7bb64b7196e2d7f",
     "paypal.lms": "71b33a911af4c1318eb2c95a267198104e4e58612001983f26ea6adb5f25c134",
-    "paypal-client.json": "a11e15cddbaef93c3690ae88d056d471936ab94042545eb7c2865fab0a56c101"
+    "paypal-client.json": "a11e15cddbaef93c3690ae88d056d471936ab94042545eb7c2865fab0a56c101",
+    "clickup.lms": "28ed14cb822d228126d92ba3a335047ec91fc853ed998960c5f1df455d576e88",
+    "clickup-client.json": "05a472db837f66684e52b11e09c213180761bff59d3bcd0801373464e1313567",
+    "typeform.lms": "3edbaa6d00ccba5bb2b15db4f4ffcda291b9b4d19a324f06639dc7b27350e54c",
+    "typeform-client.json": "b8143fdd5c14bfbf2ff5c15638a0f3293cd2821aa5ef0acc2fb52b1616557d13"
   }
 }

@@ -1,0 +1,188 @@
+{
+  "steps": [
+    {
+      "name": "credential test: forms page 1 (lowercase bearer like n8n)",
+      "path": "/forms?page=1&page_size=200",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "total_items": 3,
+        "page_count": 2,
+        "items.0.id": "fxtr001",
+        "items.1.title": "Fixture survey"
+      }
+    },
+    {
+      "name": "forms page 2 terminates page_count loop",
+      "path": "/forms?page=2&page_size=200",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "page_count": 2,
+        "items.0.id": "fxtr003"
+      }
+    },
+    {
+      "name": "form definition (capitalised Bearer also accepted)",
+      "path": "/forms/fxtr001",
+      "headers": {
+        "Authorization": "Bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "id": "fxtr001",
+        "fields.0.type": "email",
+        "fields.0.validations.required": true
+      }
+    },
+    {
+      "name": "webhooks list has the fixture webhook",
+      "path": "/forms/fxtr001/webhooks",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "items.0.tag": "fixture-tag",
+        "items.0.enabled": true
+      }
+    },
+    {
+      "name": "create webhook like TypeformTrigger",
+      "method": "PUT",
+      "path": "/forms/fxtr001/webhooks/n8n-fixturetag",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "body": {
+        "url": "https://hooks.example.test/n8n",
+        "enabled": true,
+        "verify_ssl": true,
+        "secret": "dummy-webhook-secret"
+      },
+      "json": {
+        "tag": "n8n-fixturetag",
+        "form_id": "fxtr001",
+        "url": "https://hooks.example.test/n8n",
+        "enabled": true,
+        "verify_ssl": true
+      },
+      "capture": {
+        "tag": "tag"
+      }
+    },
+    {
+      "name": "webhooks list now includes it",
+      "path": "/forms/fxtr001/webhooks",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "items.1.tag": "${tag}",
+        "items.1.url": "https://hooks.example.test/n8n"
+      }
+    },
+    {
+      "name": "read webhook",
+      "path": "/forms/fxtr001/webhooks/${tag}",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "json": {
+        "tag": "${tag}",
+        "enabled": true
+      }
+    },
+    {
+      "name": "delete webhook is 204",
+      "method": "DELETE",
+      "path": "/forms/fxtr001/webhooks/${tag}",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "status": 204
+    },
+    {
+      "name": "deleted webhook is gone",
+      "path": "/forms/fxtr001/webhooks/${tag}",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "status": 404,
+      "json": {
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "name": "webhook without url",
+      "method": "PUT",
+      "path": "/forms/fxtr001/webhooks/bad",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "body": {
+        "enabled": true
+      },
+      "status": 400,
+      "json": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "unknown form",
+      "path": "/forms/nope123",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token"
+      },
+      "status": 404,
+      "json": {
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "name": "missing token",
+      "path": "/forms",
+      "status": 401,
+      "json": {
+        "code": "UNAUTHORIZED",
+        "description": "Authentication credentials not found on the Request Headers"
+      }
+    },
+    {
+      "name": "wrong token",
+      "path": "/forms",
+      "headers": {
+        "Authorization": "bearer tfp_wrong"
+      },
+      "status": 401,
+      "json": {
+        "code": "UNAUTHORIZED",
+        "description": "Invalid token"
+      }
+    },
+    {
+      "name": "fault: rate limit",
+      "path": "/forms",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "code": "RATE_LIMIT_EXCEEDED"
+      }
+    },
+    {
+      "name": "fault: server error",
+      "path": "/forms",
+      "headers": {
+        "Authorization": "bearer tfp_fixture_typeform_token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "code": "INTERNAL_SERVER_ERROR"
+      }
+    }
+  ]
+}

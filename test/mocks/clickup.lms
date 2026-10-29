@@ -1,0 +1,91 @@
+# clickup HTTP subset (api.clickup.com/api/v2) for n8n integration tests. Synthetic credentials only.
+# n8n: credentials/ClickUpApi.credentials.ts sends the personal token raw ("Authorization: <token>", no
+# Bearer) and tests GET /team; nodes/ClickUp/GenericFunctions.ts pages list endpoints with ?page=N until
+# a page is empty. Error bodies follow ClickUp's documented {"err","ECODE"} shape (not visible in n8n).
+# Config: {"token":"pk_fixture_clickup_token"}. X-Lmmock-Fault: 429 or 500 after authentication.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); }
+ } return value;
+}
+fn fail(x: Exchange, code: int, err: string, ecode: string) -> void { x.status(code); x.json("{\"err\":" + json_quote(err) + ",\"ECODE\":" + json_quote(ecode) + "}"); }
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "pk_fixture_clickup_token";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ let auth = x.header("Authorization"); let ok = true;
+ if (auth == "") { ok = false; fail(x, 401, "Authorization header required", "OAUTH_017"); }
+ else if (!secure_equal(auth, token)) { ok = false; fail(x, 401, "Token invalid", "OAUTH_025"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After", "1"); fail(x, 429, "Rate limit reached", "OAUTH_999"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; fail(x, 500, "Fixture server failure", "INTERNAL_001"); }
+ return ok;
+}
+fn task_json(id: string, name: string, description: string, status: string) -> string {
+ let type = "open"; if (status == "complete") { type = "closed"; }
+ return "{\"id\":" + json_quote(id) + ",\"custom_id\":null,\"name\":" + json_quote(name) + ",\"text_content\":" + json_quote(description) + ",\"description\":" + json_quote(description) + ",\"status\":{\"id\":\"p901_todo\",\"status\":" + json_quote(status) + ",\"color\":\"#d3d3d3\",\"orderindex\":0,\"type\":" + json_quote(type) + "},\"orderindex\":\"1.0\",\"date_created\":\"1700000000000\",\"date_updated\":\"1700000000000\",\"date_closed\":null,\"archived\":false,\"creator\":{\"id\":1,\"username\":\"fixture\",\"color\":\"#000000\",\"email\":\"fixture@example.test\"},\"assignees\":[],\"watchers\":[],\"checklists\":[],\"tags\":[],\"parent\":null,\"priority\":null,\"due_date\":null,\"start_date\":null,\"points\":null,\"time_estimate\":null,\"custom_fields\":[],\"dependencies\":[],\"linked_tasks\":[],\"team_id\":\"9001\",\"url\":\"https://app.clickup.com/t/" + id + "\",\"sharing\":{\"public\":false},\"permission_level\":\"create\",\"list\":{\"id\":\"901\",\"name\":\"Fixture List\",\"access\":true},\"project\":{\"id\":\"90010010\",\"name\":\"Fixture Folder\",\"hidden\":false,\"access\":true},\"folder\":{\"id\":\"90010010\",\"name\":\"Fixture Folder\",\"hidden\":false,\"access\":true},\"space\":{\"id\":\"90010001\"}}";
+}
+@teams
+fn teams(x: Exchange) -> void implements Handler {
+ if (allowed(x)) { x.json("{\"teams\":[{\"id\":\"9001\",\"name\":\"Fixture Workspace\",\"color\":\"#000000\",\"avatar\":null,\"members\":[{\"user\":{\"id\":1,\"username\":\"fixture\",\"email\":\"fixture@example.test\",\"color\":\"#000000\",\"profilePicture\":null,\"initials\":\"F\",\"role\":1}}]}]}"); }
+}
+@spaces
+fn spaces(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("team") != "9001") { fail(x, 401, "Team not authorized", "OAUTH_027"); }
+  else { x.json("{\"spaces\":[{\"id\":\"90010001\",\"name\":\"Fixture Space\",\"private\":false,\"statuses\":[{\"id\":\"p901_todo\",\"status\":\"to do\",\"type\":\"open\",\"orderindex\":0,\"color\":\"#d3d3d3\"},{\"id\":\"p901_done\",\"status\":\"complete\",\"type\":\"closed\",\"orderindex\":1,\"color\":\"#6bc950\"}],\"multiple_assignees\":true}]}"); }
+ }
+}
+@lists
+fn lists(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("space") != "90010001") { fail(x, 404, "Space not found", "ITEM_013"); }
+  else { x.json("{\"lists\":[{\"id\":\"901\",\"name\":\"Fixture List\",\"orderindex\":0,\"content\":\"\",\"status\":null,\"priority\":null,\"assignee\":null,\"task_count\":2,\"due_date\":null,\"start_date\":null,\"folder\":{\"id\":\"90010010\",\"name\":\"Fixture Folder\",\"hidden\":false,\"access\":true},\"space\":{\"id\":\"90010001\",\"name\":\"Fixture Space\",\"access\":true},\"archived\":false,\"override_statuses\":false,\"permission_level\":\"create\"}]}"); }
+ }
+}
+@list_tasks
+fn list_tasks(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("list") != "901") { fail(x, 404, "List not found", "ITEM_013"); }
+  else if (x.query("page") == "" || x.query("page") == "0") { x.json("{\"tasks\":[" + task_json("abc123", "Fixture task one", "First canned task", "to do") + "," + task_json("abc124", "Fixture task two", "Second canned task", "complete") + "],\"last_page\":false}"); }
+  else { x.json("{\"tasks\":[],\"last_page\":true}"); }
+ }
+}
+@create_task
+fn create_task(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let name = body_field(x, "name");
+  if (x.param("list") != "901") { fail(x, 404, "List not found", "ITEM_013"); }
+  else if (name == "") { fail(x, 400, "Task name invalid", "INPUT_005"); }
+  else {
+   let id = "fix" + str(x.increment("clickup-task"));
+   let item = task_json(id, name, body_field(x, "description"), "to do");
+   x.set("task:" + id, item); x.json(item);
+  }
+ }
+}
+@get_task
+fn get_task(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let id = x.param("id"); let item = x.get("task:" + id);
+  if (id == "abc123") { item = task_json("abc123", "Fixture task one", "First canned task", "to do"); }
+  if (id == "abc124") { item = task_json("abc124", "Fixture task two", "Second canned task", "complete"); }
+  if (item == "") { fail(x, 404, "Task not found, deleted", "ITEM_013"); } else { x.json(item); }
+ }
+}
+@delete_task
+fn delete_task(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let id = x.param("id"); let item = x.take("task:" + id);
+  if (item == "" && id != "abc123" && id != "abc124") { fail(x, 404, "Task not found, deleted", "ITEM_013"); }
+  else { x.json("{}"); }
+ }
+}
+route("GET", "/api/v2/team", "teams");
+route("GET", "/api/v2/team/{team}/space", "spaces");
+route("GET", "/api/v2/space/{space}/list", "lists");
+route("GET", "/api/v2/list/{list}/task", "list_tasks");
+route("POST", "/api/v2/list/{list}/task", "create_task");
+route("GET", "/api/v2/task/{id}", "get_task");
+route("DELETE", "/api/v2/task/{id}", "delete_task");
+end _lmcode_
+savedsl(p, ARGV[0]);
