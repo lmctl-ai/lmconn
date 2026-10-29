@@ -72,18 +72,21 @@ LLM providers read `<provider> api_key`; `http --auth SERVICE` reads
 | `oauth status <service>` | read-only authorization, expiry, and refresh-token presence; never token values |
 
 Create a GitHub OAuth App with callback `http://127.0.0.1:15847/callback`,
-and set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in your environment:
+and set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in your environment.
+Endpoints, scope and auth style come from the built-in vendor preset
+(`src/oauth-presets.json`, mined from n8n's credential definitions — 69 services),
+so only the app credentials are needed:
 
 ```sh
 lmconn cred set github oauth_client_id --env GITHUB_OAUTH_CLIENT_ID
 lmconn cred set github oauth_client_secret --env GITHUB_OAUTH_CLIENT_SECRET
-lmconn oauth authorize github \
-  --auth-url https://github.com/login/oauth/authorize \
-  --token-url https://github.com/login/oauth/access_token \
-  --scope read:user --auth-style body --port 15847
+lmconn oauth authorize github --scope read:user --port 15847
 lmconn http request https://api.github.com/user --auth github
 ```
 
+For a service without a preset, pass `--auth-url` and `--token-url` (plus
+`--scope`, `--auth-query`, `--auth-style body`, `--no-pkce`) once; they are
+stored and reused on refresh. Resolution order: flag > cred store > preset.
 `http request --auth SERVICE` prefers a stored `api_key`, then
 `<SERVICE>_API_KEY`, then the stored OAuth token, refreshing it when expired
 and a refresh token exists. Configuration and tokens live in `oauth_*`

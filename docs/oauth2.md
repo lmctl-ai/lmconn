@@ -37,19 +37,23 @@ lmconn oauth authorize SERVICE [--client-id ID] [--client-secret SECRET] \
   [--port N] [--timeout MS] [--no-pkce] [--manual]
 ```
 
-Flags override stored configuration. Store secrets through `cred set --env`
-or `--stdin` so they do not appear in command arguments. The configuration
-fields are:
+Flags override stored configuration, which overrides the built-in vendor
+preset. `src/oauth-presets.json` holds the endpoints, scopes and quirks of
+69 services, mined from n8n's credential definitions by
+`scripts/extract-n8n-oauth-presets.mjs`; with a preset service only
+`oauth_client_id` and `oauth_client_secret` must be supplied. Store secrets
+through `cred set --env` or `--stdin` so they do not appear in command
+arguments. The configuration fields are:
 
 | Flag | Stored field | Default |
 |---|---|---|
-| `--client-id` | `oauth_client_id` | stored value |
+| `--client-id` | `oauth_client_id` | preset, else stored value |
 | `--client-secret` | `oauth_client_secret` | stored value |
-| `--auth-url` | `oauth_auth_url` | stored value |
-| `--token-url` | `oauth_token_url` | stored value |
-| `--scope` | `oauth_scope` | stored value |
-| `--auth-query` | `oauth_auth_query` | stored value |
-| `--auth-style` | `oauth_auth_style` | `header` |
+| `--auth-url` | `oauth_auth_url` | preset, else stored value |
+| `--token-url` | `oauth_token_url` | preset, else stored value |
+| `--scope` | `oauth_scope` | preset, else stored value |
+| `--auth-query` | `oauth_auth_query` | preset, else stored value |
+| `--auth-style` | `oauth_auth_style` | preset, else `header` |
 
 `--auth-query` is an extra URL query string, for example
 `--auth-query 'access_type=offline&prompt=consent'`. `header` authenticates
@@ -130,10 +134,7 @@ export GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET
 
 lmconn cred set github oauth_client_id --env GITHUB_OAUTH_CLIENT_ID
 lmconn cred set github oauth_client_secret --env GITHUB_OAUTH_CLIENT_SECRET
-lmconn oauth authorize github \
-  --auth-url https://github.com/login/oauth/authorize \
-  --token-url https://github.com/login/oauth/access_token \
-  --scope read:user --auth-style body --port 15847
+lmconn oauth authorize github --scope read:user --port 15847
 
 lmconn oauth status github
 lmconn http request https://api.github.com/user --auth github \

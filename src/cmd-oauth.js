@@ -3,9 +3,13 @@ import { randomBytes, createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { getCred, setCred, deleteCred, openDb } from './creds.js';
 import { emit, ok, emitFail } from './result.js';
+// Vendor endpoints/scopes mined from n8n's credential definitions; JSON
+// import attribute so the table is embedded in bun-compiled binaries.
+import presets from './oauth-presets.json' with { type: 'json' };
 
 const fields = ['client-id', 'client-secret', 'auth-url', 'token-url', 'scope', 'auth-query', 'auth-style'];
 const fieldName = (name) => 'oauth_' + name.replaceAll('-', '_');
+const presetKey = (name) => name.replaceAll('-', '_');
 const serviceParam = { name: 'service', type: 'string', positional: true, description: 'Credential service name' };
 export const ops = [
   { name: 'oauth_authorize', access: 'write', description: 'Authorize with a loopback callback and PKCE', params: [
@@ -49,11 +53,13 @@ function parse(args) {
 }
 
 function config(service, options, authorize) {
+  // Resolution order: flag > cred store > vendor preset (oauth-presets.json).
+  const preset = presets[service] || {};
   const cfg = {};
-  for (const name of fields) cfg[name] = options[name] ?? getCred(service, fieldName(name)) ?? '';
+  for (const name of fields) cfg[name] = options[name] ?? getCred(service, fieldName(name)) ?? preset[presetKey(name)] ?? '';
   cfg['auth-style'] ||= 'header';
   for (const name of ['client-id', 'token-url', ...(authorize ? ['auth-url'] : [])]) {
-    if (!cfg[name]) throw error('MISSING_CONFIG', `Missing ${fieldName(name)}; set with cred set ${service} ${fieldName(name)} --value ...`);
+    if (!cfg[name]) throw error('MISSING_CONFIG', `Missing ${fieldName(name)}; set with cred set ${service} ${fieldName(name)} --value ...${presets[service] ? '' : ', or use a service from src/oauth-presets.json'}`);
   }
   if (!['header', 'body'].includes(cfg['auth-style'])) throw error('USAGE', 'auth-style must be header or body');
   for (const name of ['token-url', ...(authorize ? ['auth-url'] : [])]) {
