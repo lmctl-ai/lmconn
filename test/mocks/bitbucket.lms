@@ -1,0 +1,43 @@
+# Selected n8n contract; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn setting(key: string, fallback: string) -> string { let c = json_parse(config()); let v = fallback; if (c.has(key)) { v = c.get(key).as_string(); } return v; }
+fn body(x: Exchange) -> Json { let text = str_trim(x.body()); if (text == "") { text = "{}"; } return json_parse(text); }
+# Config: {"username":"fixture-user","appPassword":"fixture-password"}.
+fn error(x: Exchange, code: int, message: string) -> void { x.status(code); x.json("{\"type\":\"error\",\"error\":{\"message\":" + json_quote(message) + "}}"); }
+fn allowed(x: Exchange) -> bool {
+ let a = x.header("Authorization"); let ok = str_starts_with(a,"Basic ") && secure_equal(basic_id(a),setting("username","fixture-user")) && secure_equal(basic_secret(a),setting("appPassword","fixture-password"));
+ if (!ok) { error(x,401,"Invalid credentials"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); error(x,429,"Rate limit exceeded"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"type\":\"user\",\"username\":\"fixture-user\",\"account_id\":\"fixture-account\",\"uuid\":\"{00000000-0000-0000-0000-000000000001}\"}"); } }
+@workspaces
+fn workspaces(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"page\":1,\"pagelen\":10,\"values\":[{\"workspace\":{\"slug\":\"fixture\",\"name\":\"Fixture Workspace\"}}]}"); } }
+@repositories
+fn repositories(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("workspace") != "fixture") { error(x,404,"Workspace not found"); }
+  else if (x.query("page") == "2") { x.json("{\"page\":2,\"pagelen\":1,\"size\":2,\"values\":[{\"type\":\"repository\",\"slug\":\"second\",\"description\":\"Second repository\"}]}"); }
+  else { x.json("{\"page\":1,\"pagelen\":1,\"size\":2,\"values\":[{\"type\":\"repository\",\"slug\":\"demo\",\"description\":\"Fixture repository\"}],\"next\":" + json_quote("http://" + x.header("Host") + "/2.0/repositories/fixture?page=2") + "}"); }
+ }
+}
+@hooks
+fn hooks(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("workspace") != "fixture" || x.param("repo") != "demo") { error(x,404,"Repository not found"); }
+  else if (x.method() == "GET") { let hook = x.get("latest-hook"); let values = "[]"; if (hook != "") { values = "[" + hook + "]"; } x.json("{\"page\":1,\"pagelen\":10,\"values\":" + values + "}"); }
+  else { let b = body(x);
+   if (!b.has("url") || !b.has("events") || !b.has("active")) { error(x,400,"Missing required fields"); }
+   else { let id = "hook-" + str(x.increment("hook-ids")); let item = "{\"type\":\"webhook\",\"uuid\":" + json_quote(id) + ",\"url\":" + b.get("url").to_json() + ",\"events\":" + b.get("events").to_json() + ",\"active\":" + b.get("active").to_json() + "}"; x.set("latest-hook",item); x.status(201); x.json(item); }
+  }
+ }
+}
+
+route("GET", "/2.0/user", "identity");
+route("GET", "/2.0/user/workspaces", "workspaces");
+route("GET", "/2.0/repositories/{workspace}", "repositories");
+route("GET", "/2.0/repositories/{workspace}/{repo}/hooks", "hooks");
+route("POST", "/2.0/repositories/{workspace}/{repo}/hooks", "hooks");
+end _lmcode_
+savedsl(p, ARGV[0]);

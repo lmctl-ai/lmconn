@@ -48,3 +48,32 @@ release on PATH (or set LMMOCK_BIN), then run `lmscript --no-preflight test.lms`
 Windows before building/publishing. No external service credentials are needed.
 Fixtures are vendored from a committed lmmock revision with SHA-256 hashes;
 `scripts/sync-lmmock.mjs --check` rejects local drift before tests run.
+
+
+## Wave 9: Bitbucket, CircleCI and PayPal
+
+The real HTTP CLI now runs 35 additional shared steps: Bitbucket (11), CircleCI
+(10), PayPal (14). Fixture source revision and per-file SHA-256 hashes are recorded
+in test/mocks/lmmock.lock.json by scripts/sync-lmmock.mjs.
+
+- Bitbucket: Basic username/app-password auth, /2.0/user credential test,
+  workspace and repository lists, both repository pages, create/list hook
+  read-back, argument/resource errors and rate limiting.
+- CircleCI: Circle-Token auth, /api/v2/me, encoded project slug, captured page
+  token, pipeline trigger/read-back, errors and rate limiting.
+- PayPal: Basic clientId:secret with a form-encoded client_credentials grant,
+  captured access token reused as Bearer, identity probe, payout create/read-back,
+  webhook-event enumeration, invalid credentials/grants/requests and server fault.
+
+This exercises client credentials through explicit HTTP calls; it does not add
+client-credentials automation to the oauth command. The identity probe is canned
+and does not establish real PayPal user-consent scopes. No live callbacks,
+CI execution or money movement occurs. Bitbucket lists retain only the latest
+created hook; CircleCI lists are fixed snapshots; PayPal batches are canned and
+unpaginated. Source provenance and full limits are documented in lmmock's
+[HTTP preset documentation](https://github.com/lmctl-ai/lmmock/blob/main/docs/http-presets.md).
+
+Use lmmock commit ef4081a or a later release for correct absolute Bitbucket
+pagination links: this change fixes the generic Host-header accessor. The shared
+CLI suite checks both pages; lmmock's protocol regression additionally follows
+the returned absolute link and verifies its loopback origin and termination.

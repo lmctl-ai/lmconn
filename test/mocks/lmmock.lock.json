@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmmock",
-  "commit": "74d3ca672e8d3fc0cc49b598daa2bdfc70ebe156",
+  "commit": "fb4953e2e5b2d45a25d6ccc2a9687a5d039cc9cf",
   "sha256": {
     "schema.json": "a7654e6cb25fb2c56d36a441adb0016db63d7fd466cdcdc32d11d588f4233ff4",
     "oauth.lms": "efb0a3d9e460d2614b8b6f915c7ed0c79d06514f021fef4bf77f8ade1eeee1c2",
@@ -52,6 +52,12 @@
     "box.lms": "9a3680bc05cd78bfdac59729907723f365fb220eb49afa4a97d6ffb83d86f458",
     "box-client.json": "d4b7a6c36172ed5223cb7dcc541ecbfaf51c077c1bf873f8c1e14f3c50fc5660",
     "cloudflare.lms": "b4413e287b5b347e4ffdaef6bd820a1d4bf82c5662b378ba992de59f2ac6f3fd",
-    "cloudflare-client.json": "9d92dce32758e41f4d18b86d5e4de99ec8d06dfe46862e41d225441a8e80d800"
+    "cloudflare-client.json": "9d92dce32758e41f4d18b86d5e4de99ec8d06dfe46862e41d225441a8e80d800",
+    "bitbucket.lms": "694a62e007316e7d7fe46f8551b75a59f4e9152e46f0ee75be0516a5534310ae",
+    "bitbucket-client.json": "8d9efe07f95ddf9e1e8dea9d3fb06f444e5b6488b8eb13abdf62cab47fad9582",
+    "circleci.lms": "53732d3af2af73805df5bbfcda85e778dee2c6b15a6ad94971d30103924cfadb",
+    "circleci-client.json": "f53f7d8c6c75b4ad0385fb69e12c379255e66f3f4a7e9555e7bb64b7196e2d7f",
+    "paypal.lms": "71b33a911af4c1318eb2c95a267198104e4e58612001983f26ea6adb5f25c134",
+    "paypal-client.json": "a11e15cddbaef93c3690ae88d056d471936ab94042545eb7c2865fab0a56c101"
   }
 }

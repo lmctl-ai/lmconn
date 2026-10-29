@@ -1,0 +1,44 @@
+# Selected n8n contract; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn setting(key: string, fallback: string) -> string { let c = json_parse(config()); let v = fallback; if (c.has(key)) { v = c.get(key).as_string(); } return v; }
+fn body(x: Exchange) -> Json { let text = str_trim(x.body()); if (text == "") { text = "{}"; } return json_parse(text); }
+# Config: {"token":"fixture-token"}. n8n encodes owner/repo as one path segment.
+fn error(x: Exchange, code: int, message: string) -> void { x.status(code); x.json("{\"message\":" + json_quote(message) + "}"); }
+fn allowed(x: Exchange) -> bool {
+ let ok = secure_equal(x.header("Circle-Token"),setting("token","fixture-token"));
+ if (!ok) { error(x,401,"Unauthorized"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); error(x,429,"Too many requests"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"id\":\"00000000-0000-0000-0000-000000000001\",\"login\":\"fixture-user\",\"name\":\"Fixture User\"}"); } }
+@pipelines
+fn pipelines(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.param("vcs") != "gh" || x.param("slug") != "fixture/demo") { error(x,404,"Project not found"); }
+  else if (x.method() == "GET") {
+   if (x.query("page-token") == "page2") { x.json("{\"items\":[{\"id\":\"pipeline-fixture-2\",\"number\":102,\"state\":\"created\"}],\"next_page_token\":null}"); }
+   else { x.json("{\"items\":[{\"id\":\"pipeline-fixture-1\",\"number\":101,\"state\":\"created\"}],\"next_page_token\":\"page2\"}"); }
+  } else {
+   let b = body(x);
+   if (b.has("branch") && b.has("tag")) { error(x,400,"Only one of branch or tag may be provided"); }
+   else { let n = str(x.increment("pipeline-ids")); let branch = "main"; if (b.has("branch")) { branch = b.get("branch").as_string(); }
+    let item = "{\"id\":" + json_quote("pipeline-created-" + n) + ",\"number\":" + n + ",\"state\":\"pending\",\"created_at\":\"2026-01-01T00:00:00Z\",\"vcs\":{\"branch\":" + json_quote(branch) + "}}";
+    x.set("pipeline:" + n,item); x.status(201); x.json(item);
+   }
+  }
+ }
+}
+@get_pipeline
+fn get_pipeline(x: Exchange) -> void implements Handler {
+ if (allowed(x)) { let item = x.get("pipeline:" + x.param("number"));
+  if (x.param("vcs") != "gh" || x.param("slug") != "fixture/demo" || item == "") { error(x,404,"Pipeline not found"); } else { x.json(item); }
+ }
+}
+
+route("GET", "/api/v2/me", "identity");
+route("GET", "/api/v2/project/{vcs}/{slug}/pipeline", "pipelines");
+route("POST", "/api/v2/project/{vcs}/{slug}/pipeline", "pipelines");
+route("GET", "/api/v2/project/{vcs}/{slug}/pipeline/{number}", "get_pipeline");
+end _lmcode_
+savedsl(p, ARGV[0]);

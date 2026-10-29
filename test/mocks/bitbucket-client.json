@@ -1,0 +1,146 @@
+{
+  "steps": [
+    {
+      "name": "credential test",
+      "path": "/2.0/user",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "account_id": "fixture-account"
+      }
+    },
+    {
+      "name": "workspaces",
+      "path": "/2.0/user/workspaces",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "values.0.workspace.slug": "fixture"
+      }
+    },
+    {
+      "name": "repositories first page",
+      "path": "/2.0/repositories/fixture",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "values.0.slug": "demo",
+        "page": 1
+      },
+      "contains": "?page=2"
+    },
+    {
+      "name": "repositories final page",
+      "path": "/2.0/repositories/fixture?page=2",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "values": [
+          {
+            "type": "repository",
+            "slug": "second",
+            "description": "Second repository"
+          }
+        ],
+        "page": 2
+      }
+    },
+    {
+      "name": "create hook",
+      "path": "/2.0/repositories/fixture/demo/hooks",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "method": "POST",
+      "body": {
+        "url": "https://fixture.invalid/hook",
+        "active": true,
+        "events": [
+          "repo:push"
+        ]
+      },
+      "status": 201,
+      "json": {
+        "active": true,
+        "events": [
+          "repo:push"
+        ]
+      },
+      "capture": {
+        "hook": "uuid"
+      }
+    },
+    {
+      "name": "read created hook",
+      "path": "/2.0/repositories/fixture/demo/hooks",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "json": {
+        "values.0.uuid": "${hook}",
+        "values.0.url": "https://fixture.invalid/hook"
+      }
+    },
+    {
+      "name": "missing repository",
+      "path": "/2.0/repositories/fixture/missing/hooks",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "status": 404,
+      "json": {
+        "type": "error",
+        "error.message": "Repository not found"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/2.0/repositories/fixture/demo/hooks",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ="
+      },
+      "method": "POST",
+      "body": {},
+      "status": 400,
+      "json": {
+        "type": "error"
+      }
+    },
+    {
+      "name": "missing auth",
+      "path": "/2.0/user",
+      "status": 401,
+      "json": {
+        "type": "error",
+        "error.message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "wrong auth",
+      "path": "/2.0/user",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOndyb25n"
+      },
+      "status": 401,
+      "json": {
+        "type": "error"
+      }
+    },
+    {
+      "name": "rate limit",
+      "path": "/2.0/user",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ=",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "error.message": "Rate limit exceeded"
+      }
+    }
+  ]
+}

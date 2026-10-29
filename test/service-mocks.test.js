@@ -11,7 +11,7 @@ import {startMock} from '../scripts/lmmock.js';
 const exec = promisify(execFile);
 const cli = fileURLToPath(new URL('../bin/lmconn.js', import.meta.url));
 const at = (value, path) => path.split('.').reduce((v, key) => v?.[key], value);
-for (const service of ['slack','discord','telegram','jira','stripe','notion','airtable','hubspot','gitlab','asana','trello','shopify','wordpress','woocommerce','pagerduty','datadog','linear','twilio','sendgrid','mailchimp','dropbox','box','cloudflare']) {
+for (const service of ['slack','discord','telegram','jira','stripe','notion','airtable','hubspot','gitlab','asana','trello','shopify','wordpress','woocommerce','pagerduty','datadog','linear','twilio','sendgrid','mailchimp','dropbox','box','cloudflare','bitbucket','circleci','paypal']) {
  test(`${service}: real HTTP connector success, authentication and fault contracts`, async t => {
   const dir = mkdtempSync(join(tmpdir(), 'lmconn-service-'));
   t.after(() => rmSync(dir, {recursive:true, force:true}));

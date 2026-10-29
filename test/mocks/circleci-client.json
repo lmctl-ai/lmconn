@@ -1,0 +1,126 @@
+{
+  "steps": [
+    {
+      "name": "identity probe",
+      "path": "/api/v2/me",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "json": {
+        "login": "fixture-user"
+      }
+    },
+    {
+      "name": "pipelines first page",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "json": {
+        "items.0.number": 101
+      },
+      "capture": {
+        "cursor": "next_page_token"
+      }
+    },
+    {
+      "name": "pipelines final page",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline?page-token=${cursor}",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "json": {
+        "items.0.number": 102,
+        "next_page_token": null
+      }
+    },
+    {
+      "name": "trigger pipeline",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "method": "POST",
+      "body": {
+        "branch": "feature-fixture"
+      },
+      "status": 201,
+      "json": {
+        "state": "pending"
+      },
+      "capture": {
+        "number": "number",
+        "id": "id"
+      }
+    },
+    {
+      "name": "read triggered pipeline",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline/${number}",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "json": {
+        "id": "${id}",
+        "vcs.branch": "feature-fixture"
+      }
+    },
+    {
+      "name": "missing pipeline",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline/999",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "message": "Pipeline not found"
+      }
+    },
+    {
+      "name": "invalid trigger",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline",
+      "headers": {
+        "Circle-Token": "fixture-token"
+      },
+      "method": "POST",
+      "body": {
+        "branch": "main",
+        "tag": "v1"
+      },
+      "status": 400,
+      "json": {
+        "message": "Only one of branch or tag may be provided"
+      }
+    },
+    {
+      "name": "missing token",
+      "path": "/api/v2/me",
+      "status": 401,
+      "json": {
+        "message": "Unauthorized"
+      }
+    },
+    {
+      "name": "wrong token",
+      "path": "/api/v2/me",
+      "headers": {
+        "Circle-Token": "wrong"
+      },
+      "status": 401,
+      "json": {
+        "message": "Unauthorized"
+      }
+    },
+    {
+      "name": "rate limit",
+      "path": "/api/v2/project/gh/fixture%2Fdemo/pipeline",
+      "headers": {
+        "Circle-Token": "fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "message": "Too many requests"
+      }
+    }
+  ]
+}

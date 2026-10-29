@@ -1,0 +1,192 @@
+{
+  "steps": [
+    {
+      "name": "client credentials grant",
+      "path": "/v1/oauth2/token",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS1jbGllbnQ6Zml4dHVyZS1zZWNyZXQ=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "method": "POST",
+      "body": "grant_type=client_credentials",
+      "json": {
+        "token_type": "Bearer",
+        "expires_in": 3600
+      },
+      "capture": {
+        "token": "access_token"
+      }
+    },
+    {
+      "name": "identity probe",
+      "path": "/v1/identity/oauth2/userinfo?schema=paypalv1.1",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "json": {
+        "name": "Fixture Merchant"
+      }
+    },
+    {
+      "name": "create payout",
+      "path": "/v1/payments/payouts",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "method": "POST",
+      "body": {
+        "sender_batch_header": {
+          "sender_batch_id": "fixture-batch"
+        },
+        "items": [
+          {
+            "recipient_type": "EMAIL",
+            "receiver": "recipient@example.test",
+            "amount": {
+              "value": "1.00",
+              "currency": "USD"
+            }
+          }
+        ]
+      },
+      "status": 201,
+      "json": {
+        "batch_header.batch_status": "PENDING"
+      },
+      "capture": {
+        "batch": "batch_header.payout_batch_id"
+      }
+    },
+    {
+      "name": "read payout",
+      "path": "/v1/payments/payouts/${batch}",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "json": {
+        "batch_header.payout_batch_id": "${batch}",
+        "items.0.receiver": "recipient@example.test",
+        "links": []
+      }
+    },
+    {
+      "name": "webhook event types",
+      "path": "/v1/notifications/webhooks-event-types",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "json": {
+        "event_types.0.name": "PAYMENT.PAYOUTSBATCH.SUCCESS"
+      }
+    },
+    {
+      "name": "missing payout",
+      "path": "/v1/payments/payouts/missing",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "status": 404,
+      "json": {
+        "name": "INVALID_RESOURCE_ID"
+      }
+    },
+    {
+      "name": "invalid payout",
+      "path": "/v1/payments/payouts",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      },
+      "method": "POST",
+      "body": {},
+      "status": 400,
+      "json": {
+        "name": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "missing Basic credentials",
+      "path": "/v1/oauth2/token",
+      "method": "POST",
+      "body": "grant_type=client_credentials",
+      "status": 401,
+      "json": {
+        "error": "invalid_client"
+      }
+    },
+    {
+      "name": "wrong Basic secret",
+      "path": "/v1/oauth2/token",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS1jbGllbnQ6d3Jvbmc=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "method": "POST",
+      "body": "grant_type=client_credentials",
+      "status": 401,
+      "json": {
+        "error": "invalid_client"
+      }
+    },
+    {
+      "name": "wrong grant",
+      "path": "/v1/oauth2/token",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS1jbGllbnQ6Zml4dHVyZS1zZWNyZXQ=",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "method": "POST",
+      "body": "grant_type=password",
+      "status": 400,
+      "json": {
+        "error": "unsupported_grant_type"
+      }
+    },
+    {
+      "name": "JSON is not a form grant",
+      "path": "/v1/oauth2/token",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZS1jbGllbnQ6Zml4dHVyZS1zZWNyZXQ=",
+        "Content-Type": "application/json"
+      },
+      "method": "POST",
+      "body": {
+        "grant_type": "client_credentials"
+      },
+      "status": 400,
+      "json": {
+        "error": "unsupported_grant_type"
+      }
+    },
+    {
+      "name": "missing Bearer",
+      "path": "/v1/payments/payouts/missing",
+      "status": 401,
+      "json": {
+        "name": "AUTHENTICATION_FAILURE"
+      }
+    },
+    {
+      "name": "wrong Bearer",
+      "path": "/v1/payments/payouts/missing",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "name": "AUTHENTICATION_FAILURE"
+      }
+    },
+    {
+      "name": "server fault",
+      "path": "/v1/payments/payouts/${batch}",
+      "headers": {
+        "Authorization": "Bearer ${token}",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "name": "INTERNAL_SERVER_ERROR"
+      }
+    }
+  ]
+}

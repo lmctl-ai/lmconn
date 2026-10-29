@@ -1,0 +1,50 @@
+# Selected n8n contract; synthetic credentials only. See docs/http-presets.md.
+p = _lmcode_ schema="schema.json";
+fn setting(key: string, fallback: string) -> string { let c = json_parse(config()); let v = fallback; if (c.has(key)) { v = c.get(key).as_string(); } return v; }
+fn body(x: Exchange) -> Json { let text = str_trim(x.body()); if (text == "") { text = "{}"; } return json_parse(text); }
+# Config: {"clientId":"fixture-client","secret":"fixture-secret","token":"fixture-access-token"}.
+fn error(x: Exchange, code: int, name: string, message: string) -> void { x.status(code); x.json("{\"name\":" + json_quote(name) + ",\"message\":" + json_quote(message) + ",\"debug_id\":\"fixture-debug\",\"details\":[],\"links\":[]}"); }
+fn allowed(x: Exchange) -> bool {
+ let ok = secure_equal(x.header("Authorization"),"Bearer " + setting("token","fixture-access-token")) && x.get("token-issued") == "yes";
+ if (!ok) { error(x,401,"AUTHENTICATION_FAILURE","Authentication failed due to invalid authentication credentials or a missing Authorization header."); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; error(x,500,"INTERNAL_SERVER_ERROR","An internal server error has occurred."); }
+ return ok;
+}
+@issue_token
+fn issue_token(x: Exchange) -> void implements Handler {
+ let a = x.header("Authorization");
+ if (!str_starts_with(a,"Basic ") || !secure_equal(basic_id(a),setting("clientId","fixture-client")) || !secure_equal(basic_secret(a),setting("secret","fixture-secret"))) {
+  x.status(401); x.json("{\"error\":\"invalid_client\",\"error_description\":\"Client Authentication failed\"}");
+ } else if (!str_starts_with(x.header("Content-Type"),"application/x-www-form-urlencoded") || form_get(x.body(),"grant_type") != "client_credentials") {
+  x.status(400); x.json("{\"error\":\"unsupported_grant_type\",\"error_description\":\"Unsupported grant_type\"}");
+ } else { x.set("token-issued","yes"); x.set_header("Cache-Control","no-store"); x.json("{\"access_token\":" + json_quote(setting("token","fixture-access-token")) + ",\"token_type\":\"Bearer\",\"expires_in\":3600,\"app_id\":\"APP-FIXTURE\"}"); }
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"user_id\":\"https://www.paypal.com/webapps/auth/identity/user/fixture-user\",\"name\":\"Fixture Merchant\"}"); } }
+@create_payout
+fn create_payout(x: Exchange) -> void implements Handler {
+ if (allowed(x)) { let b = body(x);
+  if (!b.has("sender_batch_header") || !b.has("items") || b.get("items").to_json() == "[]") { error(x,400,"VALIDATION_ERROR","Missing payout header or items"); }
+  else {
+   let id = "BATCH-" + str(x.increment("batch-ids")); let result = "{\"batch_header\":{\"payout_batch_id\":" + json_quote(id) + ",\"batch_status\":\"PENDING\",\"sender_batch_header\":" + b.get("sender_batch_header").to_json() + "},\"items\":" + b.get("items").to_json() + ",\"links\":[]}";
+   x.set("batch:" + id,result); x.status(201); x.json(result);
+  }
+ }
+}
+@get_payout
+fn get_payout(x: Exchange) -> void implements Handler {
+ if (allowed(x)) { let result = x.get("batch:" + x.param("id"));
+  if (result == "") { error(x,404,"INVALID_RESOURCE_ID","The requested resource ID was not found"); }
+  else { x.json(result); }
+ }
+}
+@events
+fn events(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"event_types\":[{\"name\":\"PAYMENT.PAYOUTSBATCH.SUCCESS\",\"description\":\"A batch payout succeeds.\"}]}"); } }
+
+route("POST", "/v1/oauth2/token", "issue_token");
+route("GET", "/v1/identity/oauth2/userinfo", "identity");
+route("POST", "/v1/payments/payouts", "create_payout");
+route("GET", "/v1/payments/payouts/{id}", "get_payout");
+route("GET", "/v1/notifications/webhooks-event-types", "events");
+end _lmcode_
+savedsl(p, ARGV[0]);
