@@ -1,3 +1,4 @@
+// auto-follow exists for demos and mock-IdP tests; real providers need a human at the browser.
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
@@ -18,6 +19,7 @@ export const ops = [
     { name: 'port', type: 'number', occurs: '?', default: 0, description: 'Loopback port (0 chooses an ephemeral port)' },
     { name: 'timeout', type: 'number', occurs: '?', default: 300000, description: 'Authorization deadline in milliseconds' },
     { name: 'no-pkce', type: 'boolean', occurs: '?', description: 'Disable PKCE for legacy providers' },
+    { name: 'auto-follow', type: 'boolean', occurs: '?', description: 'Follow authorization redirects automatically for demos and mock IdPs' },
     { name: 'manual', type: 'boolean', occurs: '?', description: 'Read a full redirect URL from stdin' },
   ] },
   { name: 'oauth_refresh', access: 'write', description: 'Refresh stored OAuth credentials', params: [serviceParam] },
@@ -39,12 +41,13 @@ function parse(args) {
     if (command !== 'authorize' || !rest[i].startsWith('--')) throw usage();
     const key = rest[i].slice(2);
     if (Object.hasOwn(options, key)) throw usage();
-    if (['manual', 'no-pkce'].includes(key)) options[key] = true;
+    if (['manual', 'no-pkce', 'auto-follow'].includes(key)) options[key] = true;
     else if ([...fields, 'port', 'timeout'].includes(key)) {
       if (rest[i + 1] === undefined || rest[i + 1].startsWith('--')) throw usage();
       options[key] = rest[++i];
     } else throw usage();
   }
+  if (options.manual && options['auto-follow']) throw usage();
   options.port = Number(options.port ?? 0);
   options.timeout = Number(options.timeout ?? 300000);
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535 ||
@@ -192,7 +195,17 @@ async function authorize(service, options, hooks) {
     }
     process.stderr.write(`Authorize URL: ${url.href}\n`);
     if (options.manual) process.stderr.write('Paste the full redirect URL on stdin:\n');
-    if (hooks.onListening) Promise.resolve().then(() => hooks.onListening(port, url.href)).catch(() => reject(error('OAUTH_ERROR', 'OAuth callback failed')));
+    // Do not await this task here: the final redirect waits for our token exchange.
+    Promise.resolve().then(async () => {
+      if (hooks.onListening) await hooks.onListening(port, url.href);
+      if (options['auto-follow']) {
+        const response = await fetch(url.href, { signal: controller.signal, redirect: 'follow' });
+        await response.arrayBuffer();
+        if (!received) reject(error('OAUTH_ERROR', 'Automatic authorization did not reach the callback'));
+      }
+    }).catch(() => reject(controller.signal.aborted
+      ? error('TIMEOUT', 'OAuth authorization timed out')
+      : error('OAUTH_ERROR', 'OAuth callback failed')));
     if (controller.signal.aborted) abort();
     const code = await callback;
     const params = { grant_type: 'authorization_code', code, redirect_uri: redirectUri };
@@ -213,6 +226,7 @@ async function authorize(service, options, hooks) {
   } finally {
     clearTimeout(timer);
     controller.signal.removeEventListener('abort', abort);
+    controller.abort(); // Also release any outstanding auto-follow request.
     if (reader) { reader.close(); (hooks.stdin || process.stdin).pause(); }
     if (server) { server.close(); server.closeAllConnections(); }
   }
