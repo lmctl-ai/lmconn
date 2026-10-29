@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import { startMock } from '../scripts/lmmock.js';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,24 +19,17 @@ import { closeDb } from '../src/creds.js';
   const key = process.env.LMCONN_TEST_API_KEY;
   let mode = 'ok';
   let received;
-  const server = http.createServer(async (req, res) => {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    received = { url: req.url, authorization: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks)) };
-    if (mode === 'timeout') return;
-    if (mode === 'unauthorized') {
-      res.writeHead(401).end(`denied ${key} Bearer different-secret-token`);
-      return;
+  const server = await startMock('llm', {mode:'ok'});
+  const callApi = async (...args) => {
+    server.configure({mode});
+    try {return await chatApi(...args);} finally {
+      const raw = await server.inspect();
+      received = {url:raw.url, authorization:raw.headers?.authorization, body:JSON.parse(raw.body || '{}')};
     }
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ model: 'served-model', choices: [{ message: { content: mode === 'echo' ? key : 'pong' } }], usage: { total_tokens: 4 } }));
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  providers.localtest = { kind: 'api', baseUrl: `http://127.0.0.1:${server.address().port}/v1/`, keyEnv: 'LMCONN_TEST_API_KEY', defaultModel: 'test-model' };
+  };
+  providers.localtest = { kind: 'api', baseUrl: `${server.origin}/v1/`, keyEnv: 'LMCONN_TEST_API_KEY', defaultModel: 'test-model' };
   t.after(async () => {
-    server.closeAllConnections();
-    await new Promise(resolve => server.close(resolve));
+    await server.close();
     delete providers.localtest;
     if (oldDb === undefined) delete process.env.LMCONN_DB; else process.env.LMCONN_DB = oldDb;
     if (oldKey === undefined) delete process.env.LMCONN_TEST_API_KEY; else process.env.LMCONN_TEST_API_KEY = oldKey;
@@ -47,23 +40,23 @@ import { closeDb } from '../src/creds.js';
     let output = '';
     const original = process.stdout.write;
     process.stdout.write = chunk => { output += chunk; return true; };
-    try { return { exit: await run(args), envelope: JSON.parse(output) }; }
+    try { server.configure({mode}); const exit = await run(args); const raw = await server.inspect(); received = {url:raw.url,authorization:raw.headers?.authorization,body:JSON.parse(raw.body || '{}')}; return {exit,envelope:JSON.parse(output)}; }
     finally { process.stdout.write = original; }
   }
   await t.test('request and response contract', async () => {
-    const result = await chatApi('localtest', { prompt: 'ping', system: 'be brief', model: 'override', maxTokens: 12 });
+    const result = await callApi('localtest', { prompt: 'ping', system: 'be brief', model: 'override', maxTokens: 12 });
     assert.equal(received.url, '/v1/chat/completions');
     assert.equal(received.authorization, `Bearer ${key}`);
     assert.deepEqual(received.body, { model: 'override', max_tokens: 12, messages: [{ role: 'system', content: 'be brief' }, { role: 'user', content: 'ping' }] });
     assert.equal(result.text, 'pong');
     assert.equal(result.model, 'served-model');
-    assert.deepEqual(result.usage, { total_tokens: 4 });
+    assert.deepEqual(result.usage, { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 });
     assert.equal(result.keySource, 'env:LMCONN_TEST_API_KEY');
     assert.ok(result.latencyMs >= 0);
   });
   await t.test('HTTP 401 mapping and redaction', async () => {
     mode = 'unauthorized';
-    await assert.rejects(chatApi('localtest', { prompt: 'ping' }), err => {
+    await assert.rejects(callApi('localtest', { prompt: 'ping' }), err => {
       assert.equal(err.code, 'HTTP_ERROR');
       assert.equal(err.status, 401);
       assert.match(err.message, /HTTP 401/);
@@ -77,12 +70,21 @@ import { closeDb } from '../src/creds.js';
   });
   await t.test('deadline aborts a stalled response', async () => {
     mode = 'timeout';
-    await assert.rejects(chatApi('localtest', { prompt: 'ping', timeoutMs: 30 }), { code: 'TIMEOUT' });
+    await assert.rejects(callApi('localtest', { prompt: 'ping', timeoutMs: 30 }), { code: 'TIMEOUT' });
   });
   await t.test('echoed key is never returned', async () => {
     mode = 'echo';
-    assert.equal((await chatApi('localtest', { prompt: 'ping' })).text, '[REDACTED]');
+    assert.equal((await callApi('localtest', { prompt: 'ping' })).text, '[REDACTED]');
   });
+  for (const [fault, code, status] of [['rate-limit','HTTP_ERROR',429],['server-error','HTTP_ERROR',503],['bad-json','API_ERROR'],['disconnect','API_ERROR']]) {
+    await t.test(`scripted ${fault} is a sanitized failure`, async () => {
+      mode = fault;
+      await assert.rejects(callApi('localtest', {prompt:'ping'}), err => {
+        assert.equal(err.code,code); if(status) assert.equal(err.status,status);
+        assert.ok(!err.message.includes(key)); return true;
+      });
+    });
+  }
   await t.test('command file input, provider sources, and usage', async () => {
     mode = 'ok';
     const file = join(dir, 'prompt.txt');

@@ -1,0 +1,112 @@
+# Strict OAuth2/PKCE fixture. Client registration and faults come from --config JSON.
+p = _lmcode_ schema="schema.json";
+fn text(j: Json, key: string) -> string { let value = ""; if (j.has(key)) { value = j.get(key).as_string(); } return value; }
+fn flag(j: Json, key: string) -> bool { let value = false; if (j.has(key)) { value = j.get(key).as_bool(); } return value; }
+fn error(x: Exchange, status: int, code: string) -> void { x.status(status); x.json("{\"error\":" + json_quote(code) + "}"); }
+fn audit(c: Json, path: string, style: string, params: string) -> void {
+ let verb = "GET"; if (path == "/token") { verb = "POST"; }
+ if (c.has("logFile")) { file_append(text(c,"logFile"), "{\"method\":" + json_quote(verb) + ",\"path\":" + json_quote(path) + ",\"authStyle\":" + json_quote(style) + ",\"params\":" + params + "}\n"); }
+}
+fn issue(x: Exchange, c: Json, id: string, scope: string, refresh: string) -> void {
+ while (true) {
+
+ let access = random_token(); let rt = refresh; if (rt == "") { rt = random_token(); }
+ let data = "{\"clientId\":" + json_quote(id) + ",\"scope\":" + json_quote(scope) + "}";
+ x.set("token:" + access, data); x.set("refresh:" + rt, data);
+ let expires = 3600; if (c.has("expiresIn")) { expires = c.get("expiresIn").as_int(); }
+ let expiry = str(expires); if (text(c,"misbehave") == "string-expires") { expiry = json_quote(expiry); }
+ let payload = "{\"access_token\":" + json_quote(access) + ",\"refresh_token\":" + json_quote(rt) + ",\"token_type\":\"Bearer\",\"scope\":" + json_quote(scope);
+ if (text(c,"misbehave") != "missing-expiry") { payload = payload + ",\"expires_in\":" + expiry; }
+ if (text(c,"misbehave") == "extra-fields") { payload = payload + ",\"provider_extension\":{\"note\":\"extra-value\"},\"future_flag\":true"; }
+ payload = payload + "}";
+ if (text(c,"misbehave") == "bad-json") { x.json("{\"access_token\":"); break; }
+ if (flag(c,"formEncodedTokenResponse")) {
+  x.set_header("Content-Type","application/x-www-form-urlencoded");
+  x.send("access_token=" + url_encode(access) + "&refresh_token=" + url_encode(rt) + "&token_type=Bearer&expires_in=" + str(expires) + "&scope=" + url_encode(scope)); break;
+ }
+ x.json(payload);
+
+ break;
+ }
+}
+@authorize
+fn authorize(x: Exchange) -> void implements Handler {
+ while (true) {
+
+ let c = json_parse(config()); let clients = c.get("clients"); let id = x.query("client_id");
+ let challenge = x.query("code_challenge"); let method = x.query("code_challenge_method");
+ let params = "{}"; if (challenge != "") { params = "{\"code_challenge\":" + json_quote(challenge) + ",\"code_challenge_method\":" + json_quote(method) + "}"; }
+ audit(c,"/authorize","",params);
+ if (!clients.has(id)) { error(x,400,"invalid_request"); break; }
+ let client = clients.get(id); let redirect = x.query("redirect_uri"); let allowed = false;
+ let uris = client.get("redirectUris"); for (i in range(0, uris.len())) { if (uris.at(i).as_string() == redirect) { allowed = true; } }
+ if (!allowed) { error(x,400,"invalid_request"); break; }
+ let sep = "?"; if (str_contains(redirect,"?")) { sep = "&"; }
+ if (x.query("response_type") != "code") { x.status(302); x.set_header("Location",redirect + sep + "error=unsupported_response_type&state=" + url_encode(x.query("state"))); break; }
+ if (challenge == "" && flag(c,"requirePkce")) { error(x,400,"invalid_request"); break; }
+ if (challenge != "") {
+  if (method == "") { method = "plain"; }
+  if (method != "S256" && !(method == "plain" && flag(c,"allowPlainPkce"))) { error(x,400,"invalid_request"); break; }
+ }
+ let code = random_token(); let ttl = 60000; if (c.has("codeLifetimeMs")) { ttl = c.get("codeLifetimeMs").as_int(); }
+ x.set("code:" + code,"{\"clientId\":" + json_quote(id) + ",\"redirect\":" + json_quote(redirect) + ",\"challenge\":" + json_quote(challenge) + ",\"method\":" + json_quote(method) + ",\"scope\":" + json_quote(x.query("scope")) + ",\"expires\":" + str(now_ms() + ttl) + "}");
+ let state = x.query("state"); if (text(c,"misbehave") == "bad-state") { state = "tampered-state"; }
+ x.status(302); x.set_header("Location",redirect + sep + "code=" + url_encode(code) + "&state=" + url_encode(state));
+
+ break;
+ }
+}
+@token
+fn token_endpoint(x: Exchange) -> void implements Handler {
+ while (true) {
+
+ let c = json_parse(config()); let body = x.body(); let id = form_get(body,"client_id"); let secret = form_get(body,"client_secret"); let style = "body";
+ if (str_starts_with(x.header("Authorization"),"Basic ")) { id = basic_id(x.header("Authorization")); secret = basic_secret(x.header("Authorization")); style = "header"; }
+ let grant = form_get(body,"grant_type"); audit(c,"/token",style,"{\"grant_type\":" + json_quote(grant) + "}");
+ if (text(c,"misbehave") == "server-error") { error(x,500,"server_error"); break; }
+ if (text(c,"misbehave") == "rate-limit") { x.set_header("Retry-After","1"); error(x,429,"temporarily_unavailable"); break; }
+ if (text(c,"misbehave") == "disconnect") { x.disconnect(); break; }
+ if (text(c,"misbehave") == "timeout") { x.delay(1000); }
+ let clients = c.get("clients"); if (!clients.has(id)) { error(x,401,"invalid_client"); break; }
+ let client = clients.get(id); if (!secure_equal(secret,text(client,"clientSecret"))) { error(x,401,"invalid_client"); break; }
+ let required = text(client,"authStyle"); if (required != "" && required != "both" && required != style) { error(x,401,"invalid_client"); break; }
+ if (grant == "authorization_code") {
+  let raw = x.take("code:" + form_get(body,"code")); if (raw == "") { error(x,400,"invalid_grant"); break; }
+  let code = json_parse(raw);
+  if (code.get("expires").as_int() < now_ms() || text(code,"clientId") != id || text(code,"redirect") != form_get(body,"redirect_uri")) { error(x,400,"invalid_grant"); break; }
+  let challenge = text(code,"challenge");
+  if (challenge != "") {
+   let v = form_get(body,"code_verifier"); if (str_len(v) < 43 || str_len(v) > 128) { error(x,400,"invalid_grant"); break; }
+   let actual = v; if (text(code,"method") == "S256") { actual = sha256_url(v); }
+   if (!secure_equal(actual,challenge)) { error(x,400,"invalid_grant"); break; }
+  }
+  issue(x,c,id,text(code,"scope"),""); break;
+ }
+ if (grant == "refresh_token") {
+  let rt = form_get(body,"refresh_token"); let raw = x.get("refresh:" + rt);
+  if (raw == "") { error(x,400,"invalid_grant"); break; }
+  let token = json_parse(raw); if (text(token,"clientId") != id) { error(x,400,"invalid_grant"); break; }
+  if (flag(c,"rotateRefreshTokens")) { raw = x.take("refresh:" + rt); if (raw == "") { error(x,400,"invalid_grant"); break; } rt = ""; }
+  issue(x,c,id,text(token,"scope"),rt); break;
+ }
+ error(x,400,"unsupported_grant_type");
+
+ break;
+ }
+}
+@userinfo
+fn userinfo(x: Exchange) -> void implements Handler {
+ while (true) {
+
+ let header = x.header("Authorization"); let data = "";
+ if (str_starts_with(header,"Bearer ")) { data = x.get("token:" + str_substr(header,7,str_len(header))); }
+ let style = ""; if (data != "") { style = "bearer"; } audit(json_parse(config()),"/api/userinfo",style,"{}");
+ if (data == "") { x.set_header("WWW-Authenticate","Bearer realm=\"mock-idp\""); error(x,401,"invalid_token"); break; }
+ let token = json_parse(data); x.json("{\"sub\":\"mock-user-1\",\"client_id\":" + json_quote(text(token,"clientId")) + ",\"scope\":" + json_quote(text(token,"scope")) + "}");
+
+ break;
+ }
+}
+route("GET","/authorize","authorize");route("POST","/token","token");route("GET","/api/userinfo","userinfo");
+end _lmcode_
+savedsl(p,ARGV[0]);

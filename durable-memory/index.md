@@ -13,3 +13,5 @@ commands do, these pages record the decisions behind them.
 
 Conventions for new chapters: one h1, concise prose or tables, no emoji,
 dates written out (2026-10-28), link related pages by relative path.
+
+- [lmmock fixture migration](lmmock-migration-2026-10-29.md): scripted HTTP/LLM/OAuth mocks, failure cases, portable lifecycle and fixture pins.

@@ -1,0 +1,34 @@
+p = _lmcode_ schema="schema.json";
+@http
+fn http_endpoint(x: Exchange) -> void implements Handler {
+ x.set("last",x.request_json()); let c = json_parse(config());
+ if (x.path() == "/token") {
+  x.set("tokenRequest",x.request_json()); x.set("refreshGeneration",c.get("generation").to_json());
+  x.set("refreshCalls",str(x.increment("refresh:" + c.get("generation").to_json())));
+  x.status(c.get("tokenStatus").as_int()); x.json(c.get("tokenReply").to_json());
+ } else if (x.path() == "/json") {
+  let echo = "null"; if (x.header("X-Echo") != "") { echo = json_quote(x.header("X-Echo")); }
+  x.json("{\"hello\":\"world\",\"echo\":" + echo + "}");
+ } else if (x.path() == "/echo-auth") { x.json("{\"authorization\":" + json_quote(x.header("Authorization")) + "}");
+ } else if (x.path() == "/text") { x.set_header("Content-Type","text/plain"); x.send("plain body");
+ } else if (x.path() == "/slow") { x.delay(500); x.send("late");
+ } else if (x.path() == "/missing") { x.status(404); x.json("{\"error\":\"nope\"}");
+ } else if (x.path() == "/rate-limit") { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":\"rate_limited\"}");
+ } else if (x.path() == "/disconnect") { x.disconnect();
+ } else if (x.path() == "/malformed") { x.json("{broken");
+ } else { x.status(500); x.send("boom"); }
+}
+@inspect
+fn inspect(x: Exchange) -> void implements Handler {
+ let last = x.get("last"); if (last == "") { last = "{}"; }
+ let token = x.get("tokenRequest"); if (token == "") { token = "{}"; }
+ let c = json_parse(config()); let count = "0";
+ let generation = c.get("generation").to_json();
+ let recorded = x.get("refreshGeneration");
+ count = "0"; if (recorded == generation) { count = x.get("refreshCalls"); }
+ x.json("{\"last\":" + last + ",\"tokenRequest\":" + token + ",\"refreshCalls\":" + count + "}");
+}
+route("GET","/__inspect","inspect");
+route("GET","/","http");route("POST","/","http");route("PUT","/","http");route("PATCH","/","http");route("DELETE","/","http");
+end _lmcode_
+savedsl(p,ARGV[0]);

@@ -1,0 +1,245 @@
+{
+  "dsl.schema": 2,
+  "name": "lmmock_v1",
+  "types": {
+    "Exchange": {
+      "methods": {
+        "method": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "path": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "query": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "param": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "header": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "body": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "status": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "void"
+          }
+        ],
+        "set_header": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "void"
+          }
+        ],
+        "send": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "void"
+          }
+        ],
+        "json": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "void"
+          }
+        ],
+        "delay": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "void"
+          }
+        ],
+        "disconnect": [
+          {
+            "params": [],
+            "returns": "void"
+          }
+        ],
+        "get": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "void"
+          }
+        ],
+        "increment": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "int"
+          }
+        ],
+        "take": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "request_json": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    }
+  },
+  "functions": {
+    "route": [
+      {
+        "params": [
+          "string",
+          "string",
+          "string"
+        ],
+        "returns": "void"
+      }
+    ],
+    "config": [
+      {
+        "params": [],
+        "returns": "string"
+      }
+    ],
+    "form_get": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "url_encode": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "url_decode": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "json_quote": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "basic_id": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "basic_secret": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "random_token": [
+      {
+        "params": [],
+        "returns": "string"
+      }
+    ],
+    "sha256_url": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "now_ms": [
+      {
+        "params": [],
+        "returns": "int"
+      }
+    ],
+    "secure_equal": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ]
+  },
+  "interfaces": {
+    "Handler": {
+      "params": [
+        {
+          "name": "exchange",
+          "type": "Exchange"
+        }
+      ],
+      "returns": "void"
+    }
+  }
+}

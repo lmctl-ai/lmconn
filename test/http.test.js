@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { startMock } from '../scripts/lmmock.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,41 +14,13 @@ process.env.LMCONN_DB = join(directory, 'creds.db');
 
 let server; let base; let last;
 let refreshCalls = 0; let tokenRequest; let tokenReply; let tokenStatus = 200;
+let generation = 0;
 before(async () => {
-  server = createServer((req, res) => {
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => {
-      last = { method: req.method, url: req.url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') };
-      if (req.url === '/token') {
-        refreshCalls++;
-        tokenRequest = last;
-        res.writeHead(tokenStatus, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(tokenReply));
-      } else if (req.url === '/echo-auth') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ authorization: req.headers.authorization }));
-      } else if (req.url === '/json') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ hello: 'world', echo: last.headers['x-echo'] ?? null }));
-      } else if (req.url === '/text') {
-        res.writeHead(200, { 'content-type': 'text/plain' });
-        res.end('plain body');
-      } else if (req.url === '/slow') {
-        setTimeout(() => { res.writeHead(200); res.end('late'); }, 500);
-      } else if (req.url === '/missing') {
-        res.writeHead(404, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'nope' }));
-      } else {
-        res.writeHead(500); res.end('boom');
-      }
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  base = `http://127.0.0.1:${server.address().port}`;
+  server = await startMock('connector-http', {generation,tokenStatus:200,tokenReply:{}});
+  base = server.origin;
 });
-after(() => {
-  server.close();
+after(async () => {
+  await server.close();
   if (originalDb === undefined) delete process.env.LMCONN_DB; else process.env.LMCONN_DB = originalDb;
   closeDb(join(directory, 'creds.db')); // Windows: open handle blocks rm
   rmSync(directory, { recursive: true, force: true });
@@ -63,7 +36,9 @@ async function capture(args) {
   };
   process.stderr.write = (chunk) => { stderr += chunk; return true; };
   try {
+    server.configure({generation,tokenStatus,tokenReply:tokenReply || {}});
     const code = await run(args);
+    ({last,tokenRequest,refreshCalls} = await server.inspect());
     return { code, stdout, stderr, envelope: JSON.parse(stdout) };
   } finally {
     process.stdout.write = stdoutWrite;
@@ -184,6 +159,7 @@ function seedOAuth(service, { expired = true, refresh = true, style = 'header' }
   if (refresh) values.oauth_refresh_token = 'refresh-private';
   for (const [field, value] of Object.entries(values)) setCred(service, field, value);
   refreshCalls = 0;
+  generation++;
   tokenStatus = 200;
   tokenReply = { access_token: 'oauth-fresh-private', expires_in: 3600, token_type: 'Bearer' };
 }
@@ -286,4 +262,16 @@ test('refresh failures do not leak token endpoint details or mutate stored token
   const missing = await capture(['request', `${base}/json`, '--auth', 'oauth-absent']);
   assert.match(missing.envelope.error.message, /lmconn cred set oauth-absent api_key/);
   assert.match(missing.envelope.error.message, /lmconn oauth authorize oauth-absent/);
+});
+
+
+test('lmmock injects rate limits, malformed JSON and connection loss', async () => {
+  const limited = await capture(['request', `${base}/rate-limit`]);
+  assert.equal(limited.envelope.result.status, 429);
+  assert.equal(limited.envelope.result.ok, false);
+  const malformed = await capture(['request', `${base}/malformed`]);
+  assert.equal(malformed.envelope.result.bodyText, '{broken');
+  const dropped = await capture(['request', `${base}/disconnect`]);
+  assert.equal(dropped.code, 1);
+  assert.equal(dropped.envelope.error.code, 'NETWORK');
 });

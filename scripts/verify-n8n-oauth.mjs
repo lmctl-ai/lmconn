@@ -9,11 +9,11 @@
  * REST sequence: POST /rest/owner/setup -> session cookie; POST /rest/credentials
  * (oAuth2Api); GET /rest/oauth2-credential/auth?id=ID -> authorization URL;
  * GET authorize without redirects -> GET callback with the n8n session cookie.
- * Success requires the n8n success page AND exactly one authorize/token request
- * with header client auth and HTTP 200 from the strict token endpoint.
+ * Success requires n8n success pages for header, body and PKCE flows.
+ * The lmmock audit must contain one authorize/token pair per flow.
  *
- * The standalone mock launcher does not expose idp.log and prints fixture
- * credentials at startup. Instead --idp-child runs that same createMockIdP
+ * The standalone mock launcher does not expose idp.log.
+ * Instead --idp-child runs that same createMockIdP
  * implementation/configuration and exposes only redacted observations via IPC.
  * Verified end-to-end with n8n 2.45.4 on 2026-10-28.
  * No replacement OAuth client or token exchange is implemented here: n8n does it.
@@ -34,7 +34,7 @@ if (process.argv.includes('--idp-child')) {
   const { createMockIdP } = await import('./mock-idp.js');
   const idp = await createMockIdP({ port: 5556 });
   idp.registerClient({ clientId: 'demo-client', clientSecret: 'demo-secret',
-    redirectUris: ['http://localhost:5678/rest/oauth2-credential/callback'], authStyle: 'header' });
+    redirectUris: ['http://localhost:5678/rest/oauth2-credential/callback'], authStyle: 'both' });
   process.on('message', message => {
     if (message === 'log') process.send({ type: 'log', entries: idp.log.map(entry => ({
       method: entry.method, path: entry.path, authStyle: entry.authStyle,
@@ -140,12 +140,13 @@ async function main() {
       email: 'oauth-test@example.com', firstName: 'OAuth', lastName: 'Verifier', password: `Aa1!${randomBytes(24).toString('hex')}`,
     }) });
     check(cookies.size > 0, 'owner setup issued a session cookie');
-    phase = 'credential creation';
+    for (const variant of [{name:'header',authentication:'header',usePkce:false},{name:'body',authentication:'body',usePkce:false},{name:'pkce',authentication:'header',usePkce:true}]) {
+    phase = 'credential creation '+variant.name;
     const created = await (await n8nFetch('/rest/credentials', { method: 'POST', body: JSON.stringify({
-      name: 'Strict mock OAuth verification', type: 'oAuth2Api', data: {
+      name: 'lmmock OAuth verification '+variant.name, type: 'oAuth2Api', data: {
         grantType: 'authorizationCode', authUrl: 'http://127.0.0.1:5556/authorize',
         accessTokenUrl: 'http://127.0.0.1:5556/token', clientId: 'demo-client', clientSecret: 'demo-secret',
-        scope: 'openid profile', authentication: 'header', authQueryParameters: '',
+        scope: 'openid profile', authentication: variant.authentication, usePkce: variant.usePkce, authQueryParameters: '',
       },
     }) })).json();
     check(typeof created.data?.id === 'string', 'n8n created a Generic OAuth2 credential');
@@ -160,15 +161,15 @@ async function main() {
     check(callback.origin === origin && callback.pathname === '/rest/oauth2-credential/callback', 'mock redirected to the n8n callback');
     phase = 'n8n callback and token exchange';
     const html = await (await n8nFetch(callback.pathname + callback.search)).text();
-    check(html.includes('<h1>Connection successful</h1>'), 'n8n callback confirmed successful token exchange and persistence');
+    check(html.includes('<h1>Connection successful</h1>'), 'n8n callback confirmed token exchange and persistence: '+variant.name);
+    }
     phase = 'mock request audit';
     const pending = messageFrom(idp, 'log'); idp.send('log');
     const { entries } = await pending;
     const authorize = entries.filter(entry => entry.path === '/authorize');
     const token = entries.filter(entry => entry.path === '/token');
-    check(authorize.length === 1 && token.length === 1 && token[0].method === 'POST' &&
-      token[0].authStyle === 'header' && token[0].grantType === 'authorization_code',
-    'mock observed exactly one authorize and one authorization_code token exchange using HTTP Basic');
+    check(authorize.length === 3 && token.length === 3 && token.every(entry => entry.method === 'POST' && entry.grantType === 'authorization_code') && token.map(entry => entry.authStyle).join(',') === 'header,body,header',
+    'lmmock observed all three n8n flows with header/body client authentication');
   } catch (error) {
     // Our messages contain only fixed descriptions/statuses; never print remote bodies or URLs.
     const safe = error instanceof TypeError || error instanceof SyntaxError ? 'unexpected transport or response format' : error.message;

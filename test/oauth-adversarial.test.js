@@ -1,6 +1,5 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,49 +38,12 @@ async function capture(args, hooks, secrets) {
   return { code, envelope: JSON.parse(stdout) };
 }
 
-async function scenario(t, service, { misbehave, transform, failToken = false, scope = 'read' } = {}) {
-  const idp = await createMockIdP({ port: 0, requirePkce: true, misbehave });
+async function scenario(t, service, { misbehave, failToken = false, scope = 'read' } = {}) {
+  const idp = await createMockIdP({ port: 0, requirePkce: true, misbehave: failToken ? 'server-error' : misbehave });
   t.after(() => idp.close());
   const secrets = [clientSecret, Buffer.from(`adversarial-client:${clientSecret}`).toString('base64')];
-  const errors = [];
-  // A test-owned token proxy adds response mutations without changing the shared IdP.
-  const proxy = createServer(async (req, res) => {
-    try {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const body = Buffer.concat(chunks);
-      const params = new URLSearchParams(body.toString());
-      for (const field of ['code', 'code_verifier']) if (params.get(field)) secrets.push(params.get(field));
-      const upstream = await fetch(idp.tokenUrl, {
-        method: 'POST', body,
-        headers: { authorization: req.headers.authorization, 'content-type': 'application/x-www-form-urlencoded' },
-      });
-      let text = await upstream.text();
-      let token;
-      try { token = JSON.parse(text); } catch { /* bad-json is intentional */ }
-      if (token) {
-        for (const field of ['access_token', 'refresh_token']) if (token[field]) secrets.push(token[field]);
-        if (transform) text = JSON.stringify(transform(token));
-      }
-      if (failToken) {
-        res.writeHead(500, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'server_error', error_description: secrets.join(' ') }));
-      } else {
-        res.writeHead(upstream.status, { 'content-type': 'application/json' });
-        res.end(text);
-      }
-    } catch (error) {
-      errors.push(error);
-      res.writeHead(500).end();
-    }
-  });
-  await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve));
-  t.after(async () => {
-    await new Promise(resolve => { proxy.close(resolve); proxy.closeAllConnections(); });
-    assert.deepEqual(errors, [], 'test proxy must not fail');
-  });
   const args = ['authorize', service, '--client-id', 'adversarial-client', '--client-secret', clientSecret,
-    '--auth-url', idp.authUrl, '--token-url', `http://127.0.0.1:${proxy.address().port}/token`,
+    '--auth-url', idp.authUrl, '--token-url', idp.tokenUrl,
     '--scope', scope, '--port', '0', '--timeout', '5000'];
   const result = await capture(args, {
     async onListening(port, url) {
@@ -124,7 +86,7 @@ test('numeric string expires_in is accepted and gives a finite future expiry', a
 
 test('omitted expires_in clears stale expiry and status reports null', async t => {
   setCred('missing-expiry', 'oauth_expires_at', new Date(0).toISOString());
-  const result = await scenario(t, 'missing-expiry', { transform(token) { delete token.expires_in; return token; } });
+  const result = await scenario(t, 'missing-expiry', { misbehave:'missing-expiry' });
   assert.equal(result.code, 0);
   assert.equal(result.envelope.result.expiresAt, null);
   assert.equal(result.status.expiresAt, null);
@@ -133,7 +95,7 @@ test('omitted expires_in clears stale expiry and status reports null', async t =
 });
 
 test('unknown token response fields are tolerated without appearing in metadata', async t => {
-  const result = await scenario(t, 'extra-fields', { transform: token => ({ ...token, provider_extension: { note: 'extra-value' }, future_flag: true }) });
+  const result = await scenario(t, 'extra-fields', { misbehave:'extra-fields' });
   assert.equal(result.code, 0);
   assert.equal(result.status.authorized, true);
   assert.deepEqual(Object.keys(result.envelope.result).sort(), ['expiresAt', 'hasRefreshToken', 'scope', 'service']);

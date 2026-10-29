@@ -1,0 +1,42 @@
+# Deterministic OpenAI-compatible chat and tool-call fixture; no model or paid API.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let value = ""; if (j.has(key)) { value = j.get(key).as_string(); } return value; }
+@chat
+fn completion(x: Exchange) -> void implements Handler {
+ while (true) {
+  x.set("last",x.request_json());
+  let c = json_parse(config()); let mode = field(c,"mode"); let auth = x.header("Authorization");
+  if (mode == "unauthorized" || (c.has("apiKey") && !secure_equal(auth,"Bearer " + field(c,"apiKey")))) { x.status(401); x.json("{\"error\":{\"message\":\"invalid API key\",\"type\":\"authentication_error\"}}"); break; }
+  if (mode == "rate-limit") { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\"}}"); break; }
+  if (mode == "server-error") { x.status(503); x.json("{\"error\":{\"message\":\"unavailable\"}}"); break; }
+  if (mode == "disconnect") { x.disconnect(); break; }
+  if (mode == "bad-json") { x.json("{broken"); break; }
+  if (mode == "timeout") { x.delay(1000); }
+  let request = json_parse(x.body()); let model = "mock-agent"; if (request.has("model")) { model = field(request,"model"); }
+  let content = "pong"; let reason = "stop"; let message = ""; let tool = false;
+  let messages = request.get("messages"); let tool_result = false;
+  for (i in range(0,messages.len())) { if (field(messages.at(i),"role") == "tool") { tool_result = true; content = "Tool result: " + field(messages.at(i),"content"); } }
+  if (request.has("tools") && !tool_result) { tool = true; }
+  if (mode == "ok" || mode == "echo" || mode == "timeout") { model = "served-model"; }
+  if (mode == "echo") { content = str_substr(auth,7,str_len(auth)); }
+  let tools = "[]";
+  if (tool) {
+   let name = field(request.get("tools").at(0).get("function"),"name");
+   tools = "[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":" + json_quote(name) + ",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]";
+   reason = "tool_calls"; message = "{\"role\":\"assistant\",\"content\":null,\"tool_calls\":" + tools + "}";
+  } else { message = "{\"role\":\"assistant\",\"content\":" + json_quote(content) + "}"; }
+  let stream = false; if (request.has("stream")) { stream = request.get("stream").as_bool(); }
+  if (stream) {
+   x.set_header("Content-Type","text/event-stream");
+   let delta = "{\"role\":\"assistant\",\"content\":" + json_quote(content) + "}";
+   if (tool) { let name = field(request.get("tools").at(0).get("function"),"name"); delta = "{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":" + json_quote(name) + ",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]}"; }
+   x.send("data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"model\":" + json_quote(model) + ",\"choices\":[{\"index\":0,\"delta\":" + delta + ",\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":" + json_quote(reason) + "}]}\n\ndata: [DONE]\n\n");
+  } else { x.json("{\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion\",\"model\":" + json_quote(model) + ",\"choices\":[{\"index\":0,\"message\":" + message + ",\"finish_reason\":" + json_quote(reason) + "}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":2,\"total_tokens\":4}}"); }
+  break;
+ }
+}
+@inspect
+fn inspect(x: Exchange) -> void implements Handler { let last = x.get("last"); if (last == "") { last = "{}"; } x.json(last); }
+route("POST","/v1/chat/completions","chat");route("GET","/__inspect","inspect");
+end _lmcode_
+savedsl(p,ARGV[0]);

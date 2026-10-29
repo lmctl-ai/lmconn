@@ -232,3 +232,33 @@ is an end-to-end demo that needs no credentials. Details in
 - `durable-memory/` — design decisions (start at `durable-memory/index.md`)
 
 See AGENTS.md for the engineering contracts.
+
+## lmmock integration fixtures
+
+The HTTP, LLM and OAuth integration tests use real loopback servers whose handlers
+are lmcode scripts in `test/mocks/`. JavaScript only starts/stops lmmock, supplies
+private temporary configuration and checks responses. There is no JavaScript
+OAuth provider or response-mutation proxy.
+
+Install the tested [lmmock release](https://github.com/lmctl-ai/lmmock/releases/tag/v0.1.3),
+put it on PATH (or set `LMMOCK_BIN`), and run:
+
+```sh
+npm install -g @lmctl-ai/lmctl
+npm test
+```
+
+CI installs the pinned lmmock binary and verifies its checksum on Linux, macOS
+and Windows. `test/mocks/lmmock.lock.json` records the reviewed script commit and
+hashes. Refresh with `node scripts/sync-lmmock.mjs ../lmmock`; do not edit vendored
+scripts independently.
+
+Tests cover OAuth redirect/PKCE/code-replay rules, token rotation and malformed
+responses, HTTP timeouts/disconnects/rate limits, LLM authentication, rate limits,
+invalid JSON and unavailable endpoints. Fixture credentials stay in temporary
+private configuration or process memory. Audit logs contain only redacted fields.
+
+With n8n 2.45.4 installed separately, `node scripts/verify-n8n-oauth.mjs` starts an
+isolated n8n instance and verifies header-auth, body-auth and PKCE authorization
+flows against lmmock. It uses fresh temporary state and loopback ports 5556,
+5678 and 5679, then cleans up both processes and state.
