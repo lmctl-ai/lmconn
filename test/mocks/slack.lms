@@ -1,0 +1,72 @@
+# Slack Web API fixture (slack.com/api/*), mined from n8n nodes/Slack/V2 and credentials/SlackApi.
+# Auth: "Authorization: Bearer xoxb-..." (default token xoxb-fixture-token; config {"token": "..."}).
+# Slack reports auth and argument errors as HTTP 200 {"ok":false,"error":"..."}; only rate limits are 429.
+# Fault routes: channel C0RATELIMIT -> 429 ratelimited with Retry-After; config {"mode":"rate-limit"} -> every call 429.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key)) { let t = j.get(key).to_json(); if (str_starts_with(t, "\"")) { v = j.get(key).as_string(); } else { v = t; } } return v; }
+fn arg(x: Exchange, key: string) -> string {
+ let b = str_trim(x.body()); let v = "";
+ if (str_starts_with(b, "{")) { v = field(json_parse(b), key); } else if (b != "") { v = form_get(b, key); }
+ if (v == "") { v = x.query(key); }
+ return v;
+}
+fn token(x: Exchange) -> string {
+ let c = json_parse(config()); let want = "xoxb-fixture-token"; if (c.has("token")) { want = field(c, "token"); }
+ let auth = x.header("Authorization"); let state = "ok";
+ if (auth == "") { state = "not_authed"; } else if (!secure_equal(auth, "Bearer " + want)) { state = "invalid_auth"; }
+ if (c.has("mode") && field(c, "mode") == "rate-limit") { state = "ratelimited"; }
+ return state;
+}
+fn deny(x: Exchange, error: string) -> void { if (error == "ratelimited") { x.status(429); x.set_header("Retry-After", "1"); } x.json("{\"ok\":false,\"error\":" + json_quote(error) + "}"); }
+@auth_test
+fn auth_test(x: Exchange) -> void implements Handler {
+ let t = token(x);
+ if (t != "ok") { deny(x, t); } else { x.json("{\"ok\":true,\"url\":\"https://fixture.slack.com/\",\"team\":\"Fixture Workspace\",\"user\":\"lmmock\",\"team_id\":\"T0FIXTURE\",\"user_id\":\"U0FIXTURE\",\"bot_id\":\"B0FIXTURE\"}"); }
+}
+@post_message
+fn post_message(x: Exchange) -> void implements Handler {
+ let t = token(x); let channel = arg(x, "channel"); let text = arg(x, "text");
+ if (t != "ok") { deny(x, t); }
+ else if (channel == "") { deny(x, "channel_not_found"); }
+ else if (channel == "C0RATELIMIT") { deny(x, "ratelimited"); }
+ else if (text == "" && arg(x, "blocks") == "") { deny(x, "no_text"); }
+ else {
+  let n = x.increment("slack-ts"); let ts = "1700000000.00010" + str(n);
+  x.json("{\"ok\":true,\"channel\":" + json_quote(channel) + ",\"ts\":" + json_quote(ts) + ",\"message\":{\"type\":\"message\",\"text\":" + json_quote(text) + ",\"user\":\"U0FIXTURE\",\"bot_id\":\"B0FIXTURE\",\"ts\":" + json_quote(ts) + "}}");
+ }
+}
+@update_message
+fn update_message(x: Exchange) -> void implements Handler {
+ let t = token(x); let channel = arg(x, "channel"); let ts = arg(x, "ts"); let text = arg(x, "text");
+ if (t != "ok") { deny(x, t); }
+ else if (channel == "" || ts == "") { deny(x, "message_not_found"); }
+ else { x.json("{\"ok\":true,\"channel\":" + json_quote(channel) + ",\"ts\":" + json_quote(ts) + ",\"text\":" + json_quote(text) + "}"); }
+}
+@channels
+fn channels(x: Exchange) -> void implements Handler {
+ let t = token(x);
+ if (t != "ok") { deny(x, t); }
+ else { x.json("{\"ok\":true,\"channels\":[{\"id\":\"C0GENERAL\",\"name\":\"general\",\"is_channel\":true,\"is_member\":true,\"num_members\":3},{\"id\":\"C0RANDOM\",\"name\":\"random\",\"is_channel\":true,\"is_member\":false,\"num_members\":2}],\"response_metadata\":{\"next_cursor\":\"\"}}"); }
+}
+@users
+fn users(x: Exchange) -> void implements Handler {
+ let t = token(x);
+ if (t != "ok") { deny(x, t); }
+ else { x.json("{\"ok\":true,\"members\":[{\"id\":\"U0FIXTURE\",\"name\":\"lmmock\",\"real_name\":\"lmmock bot\",\"is_bot\":true},{\"id\":\"U0ALICE\",\"name\":\"alice\",\"real_name\":\"Alice Fixture\",\"is_bot\":false}],\"response_metadata\":{\"next_cursor\":\"\"}}"); }
+}
+@user_info
+fn user_info(x: Exchange) -> void implements Handler {
+ let t = token(x); let user = arg(x, "user");
+ if (t != "ok") { deny(x, t); }
+ else if (user == "U0ALICE") { x.json("{\"ok\":true,\"user\":{\"id\":\"U0ALICE\",\"name\":\"alice\",\"real_name\":\"Alice Fixture\",\"is_bot\":false,\"profile\":{\"email\":\"alice@example.test\"}}}"); }
+ else if (user == "U0FIXTURE") { x.json("{\"ok\":true,\"user\":{\"id\":\"U0FIXTURE\",\"name\":\"lmmock\",\"real_name\":\"lmmock bot\",\"is_bot\":true}}"); }
+ else { deny(x, "user_not_found"); }
+}
+route("GET", "/api/auth.test", "auth_test"); route("POST", "/api/auth.test", "auth_test");
+route("POST", "/api/chat.postMessage", "post_message");
+route("POST", "/api/chat.update", "update_message");
+route("GET", "/api/conversations.list", "channels"); route("POST", "/api/conversations.list", "channels");
+route("GET", "/api/users.list", "users"); route("POST", "/api/users.list", "users");
+route("GET", "/api/users.info", "user_info"); route("POST", "/api/users.info", "user_info");
+end _lmcode_
+savedsl(p, ARGV[0]);

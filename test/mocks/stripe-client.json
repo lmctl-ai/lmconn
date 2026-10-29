@@ -1,0 +1,180 @@
+{
+  "steps": [
+    {
+      "name": "balance",
+      "method": "GET",
+      "path": "/v1/balance",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture"
+      },
+      "json": {
+        "object": "balance",
+        "available.0.amount": 123450,
+        "available.0.currency": "usd"
+      }
+    },
+    {
+      "name": "list charges (credential test)",
+      "method": "GET",
+      "path": "/v1/charges",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture"
+      },
+      "json": {
+        "object": "list",
+        "data.0.id": "ch_fixture1",
+        "has_more": false
+      }
+    },
+    {
+      "name": "create customer (form body)",
+      "method": "POST",
+      "path": "/v1/customers",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "email=bob%40example.test&name=Bob+Fixture",
+      "json": {
+        "object": "customer",
+        "email": "bob@example.test",
+        "name": "Bob Fixture"
+      },
+      "capture": {
+        "customer": "id"
+      }
+    },
+    {
+      "name": "list customers",
+      "method": "GET",
+      "path": "/v1/customers?limit=10",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture"
+      },
+      "json": {
+        "object": "list",
+        "data.0.email": "alice@example.test"
+      }
+    },
+    {
+      "name": "get customer",
+      "method": "GET",
+      "path": "/v1/customers/cus_fixture1",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture"
+      },
+      "json": {
+        "id": "cus_fixture1",
+        "name": "Alice Fixture"
+      }
+    },
+    {
+      "name": "unknown customer",
+      "method": "GET",
+      "path": "/v1/customers/cus_nobody",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture"
+      },
+      "status": 404,
+      "json": {
+        "error.type": "invalid_request_error",
+        "error.code": "resource_missing"
+      }
+    },
+    {
+      "name": "create charge (form body)",
+      "method": "POST",
+      "path": "/v1/charges",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "amount=2500&currency=usd&customer=${customer}&description=lmmock",
+      "json": {
+        "object": "charge",
+        "amount": 2500,
+        "currency": "usd",
+        "status": "succeeded"
+      }
+    },
+    {
+      "name": "create token",
+      "method": "POST",
+      "path": "/v1/tokens",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "card%5Bnumber%5D=4242424242424242&card%5Bexp_month%5D=12&card%5Bexp_year%5D=2030&card%5Bcvc%5D=123",
+      "json": {
+        "object": "token",
+        "card.last4": "4242"
+      }
+    },
+    {
+      "name": "invalid amount",
+      "method": "POST",
+      "path": "/v1/charges",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "amount=lots&currency=usd",
+      "status": 400,
+      "json": {
+        "error.type": "invalid_request_error",
+        "error.param": "amount"
+      }
+    },
+    {
+      "name": "missing key",
+      "method": "GET",
+      "path": "/v1/balance",
+      "status": 401,
+      "json": {
+        "error.type": "invalid_request_error"
+      },
+      "contains": "You did not provide an API key"
+    },
+    {
+      "name": "wrong key never echoed",
+      "method": "GET",
+      "path": "/v1/balance",
+      "headers": {
+        "Authorization": "Bearer sk_test_wrong_secret"
+      },
+      "status": 401,
+      "json": {
+        "error.message": "Invalid API Key provided: sk_test_***"
+      }
+    },
+    {
+      "name": "fault: rate limit",
+      "method": "POST",
+      "path": "/v1/charges",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "amount=429&currency=usd",
+      "status": 429,
+      "json": {
+        "error.type": "rate_limit_error"
+      }
+    },
+    {
+      "name": "fault: api error",
+      "method": "POST",
+      "path": "/v1/charges",
+      "headers": {
+        "Authorization": "Bearer sk_test_fixture",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "amount=500&currency=usd",
+      "status": 500,
+      "json": {
+        "error.type": "api_error"
+      }
+    }
+  ]
+}

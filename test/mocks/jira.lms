@@ -1,0 +1,59 @@
+# Jira Cloud REST fixture (<domain>/rest/api/2/*), mined from n8n nodes/Jira (GenericFunctions.ts:
+# `${domain}/rest${endpoint}` with endpoints /api/2/issue, /api/2/search, /api/2/project, ...) and
+# credentials/JiraSoftwareCloudApi (HTTP Basic email:apiToken; credential test GET /rest/api/2/myself).
+# Auth defaults: fixture@example.test / fixture-api-token (config {"email": "...", "apiToken": "..."}).
+# Jira answers 401 and 404 with {"errorMessages":[...],"errors":{}}.
+# Faults: issue FIX-429 -> 429 with Retry-After; issue FIX-500 -> 500.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key)) { let t = j.get(key).to_json(); if (str_starts_with(t, "\"")) { v = j.get(key).as_string(); } else { v = t; } } return v; }
+fn authorized(x: Exchange) -> bool {
+ let c = json_parse(config()); let email = "fixture@example.test"; let token = "fixture-api-token";
+ if (c.has("email")) { email = field(c, "email"); } if (c.has("apiToken")) { token = field(c, "apiToken"); }
+ let auth = x.header("Authorization");
+ return str_starts_with(auth, "Basic ") && secure_equal(basic_id(auth), email) && secure_equal(basic_secret(auth), token);
+}
+fn errors(x: Exchange, code: int, message: string) -> void { x.status(code); x.json("{\"errorMessages\":[" + json_quote(message) + "],\"errors\":{}}"); }
+fn unauthorized(x: Exchange) -> void { x.set_header("WWW-Authenticate", "OAuth realm=\"https://fixture.atlassian.net\""); errors(x, 401, "Client must be authenticated to access this resource."); }
+fn issue_json(key: string, summary: string, status: string) -> string {
+ return "{\"id\":\"10001\",\"key\":" + json_quote(key) + ",\"self\":\"https://fixture.atlassian.net/rest/api/2/issue/10001\",\"fields\":{\"summary\":" + json_quote(summary) + ",\"status\":{\"name\":" + json_quote(status) + ",\"statusCategory\":{\"key\":\"new\"}},\"issuetype\":{\"name\":\"Task\"},\"project\":{\"key\":\"FIX\",\"name\":\"Fixture\"},\"priority\":{\"name\":\"Medium\"},\"assignee\":null,\"reporter\":{\"displayName\":\"Fixture User\",\"emailAddress\":\"fixture@example.test\"}}}";
+}
+@myself
+fn myself(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); } else { x.json("{\"accountId\":\"5b10fixtureaccount\",\"displayName\":\"Fixture User\",\"emailAddress\":\"fixture@example.test\",\"active\":true,\"timeZone\":\"UTC\"}"); }
+}
+@get_issue
+fn get_issue(x: Exchange) -> void implements Handler {
+ let key = x.param("key");
+ if (!authorized(x)) { unauthorized(x); }
+ else if (key == "FIX-429") { x.status(429); x.set_header("Retry-After", "1"); x.json("{\"errorMessages\":[\"Rate limit exceeded.\"],\"errors\":{}}"); }
+ else if (key == "FIX-500") { errors(x, 500, "Internal server error"); }
+ else if (key == "FIX-1") { x.json(issue_json("FIX-1", "Fixture issue one", "To Do")); }
+ else if (key == "FIX-2") { x.json(issue_json("FIX-2", "Fixture issue two", "Done")); }
+ else { errors(x, 404, "Issue does not exist or you do not have permission to see it."); }
+}
+@create_issue
+fn create_issue(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); }
+ else {
+  let b = str_trim(x.body()); let summary = "";
+  if (str_starts_with(b, "{")) { let j = json_parse(b); if (j.has("fields")) { summary = field(j.get("fields"), "summary"); } }
+  if (summary == "") { x.status(400); x.json("{\"errorMessages\":[],\"errors\":{\"summary\":\"You must specify a summary of the issue.\"}}"); }
+  else { let n = x.increment("jira-issue") + 2; x.status(201); x.json("{\"id\":\"1000" + str(n) + "\",\"key\":\"FIX-" + str(n) + "\",\"self\":\"https://fixture.atlassian.net/rest/api/2/issue/1000" + str(n) + "\"}"); }
+ }
+}
+@search
+fn search(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); }
+ else { x.json("{\"startAt\":0,\"maxResults\":50,\"total\":2,\"issues\":[" + issue_json("FIX-1", "Fixture issue one", "To Do") + "," + issue_json("FIX-2", "Fixture issue two", "Done") + "]}"); }
+}
+@projects
+fn projects(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); } else { x.json("[{\"id\":\"10000\",\"key\":\"FIX\",\"name\":\"Fixture\",\"projectTypeKey\":\"software\"}]"); }
+}
+route("GET", "/rest/api/2/myself", "myself");
+route("GET", "/rest/api/2/issue/{key}", "get_issue");
+route("POST", "/rest/api/2/issue", "create_issue");
+route("GET", "/rest/api/2/search", "search"); route("POST", "/rest/api/2/search", "search"); route("GET", "/rest/api/2/search/jql", "search");
+route("GET", "/rest/api/2/project", "projects"); route("GET", "/rest/api/2/project/search", "projects");
+end _lmcode_
+savedsl(p, ARGV[0]);

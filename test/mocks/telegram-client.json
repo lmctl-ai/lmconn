@@ -1,0 +1,151 @@
+{
+  "steps": [
+    {
+      "name": "getMe (credential test)",
+      "method": "GET",
+      "path": "/bot123456:fixture-telegram-token/getMe",
+      "json": {
+        "ok": true,
+        "result.is_bot": true,
+        "result.username": "lmmock_bot"
+      }
+    },
+    {
+      "name": "sendMessage json body",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendMessage",
+      "body": {
+        "chat_id": 987654321,
+        "text": "hello from lmmock",
+        "parse_mode": "Markdown"
+      },
+      "json": {
+        "ok": true,
+        "result.text": "hello from lmmock",
+        "result.chat.id": 987654321,
+        "result.from.username": "lmmock_bot"
+      },
+      "capture": {
+        "message_id": "result.message_id"
+      }
+    },
+    {
+      "name": "sendMessage form body",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendMessage",
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "body": "chat_id=%40fixture_channel&text=form+encoded",
+      "json": {
+        "ok": true,
+        "result.text": "form encoded",
+        "result.chat.id": "@fixture_channel"
+      }
+    },
+    {
+      "name": "getChat",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/getChat",
+      "body": {
+        "chat_id": 987654321
+      },
+      "json": {
+        "ok": true,
+        "result.id": 987654321,
+        "result.type": "private"
+      }
+    },
+    {
+      "name": "sendPhoto",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendPhoto",
+      "body": {
+        "chat_id": 987654321,
+        "photo": "https://example.test/a.png",
+        "caption": "a photo"
+      },
+      "json": {
+        "ok": true,
+        "result.text": "a photo",
+        "result.photo.0.file_id": "AgACfixturephoto"
+      }
+    },
+    {
+      "name": "getUpdates",
+      "method": "GET",
+      "path": "/bot123456:fixture-telegram-token/getUpdates",
+      "json": {
+        "ok": true,
+        "result": []
+      }
+    },
+    {
+      "name": "missing chat_id",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendMessage",
+      "body": {
+        "text": "x"
+      },
+      "status": 400,
+      "json": {
+        "ok": false,
+        "error_code": 400,
+        "description": "Bad Request: chat_id is empty"
+      }
+    },
+    {
+      "name": "wrong token in path",
+      "method": "GET",
+      "path": "/bot123456:wrong-token/getMe",
+      "status": 401,
+      "json": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      }
+    },
+    {
+      "name": "unknown method",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendRocket",
+      "body": {
+        "chat_id": 1
+      },
+      "status": 404,
+      "json": {
+        "ok": false,
+        "error_code": 404
+      }
+    },
+    {
+      "name": "fault: too many requests",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendMessage",
+      "body": {
+        "chat_id": 429,
+        "text": "x"
+      },
+      "status": 429,
+      "json": {
+        "ok": false,
+        "error_code": 429,
+        "parameters.retry_after": 1
+      }
+    },
+    {
+      "name": "fault: server error",
+      "method": "POST",
+      "path": "/bot123456:fixture-telegram-token/sendMessage",
+      "body": {
+        "chat_id": 500,
+        "text": "x"
+      },
+      "status": 500,
+      "json": {
+        "ok": false,
+        "error_code": 500
+      }
+    }
+  ]
+}

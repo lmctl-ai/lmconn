@@ -127,3 +127,36 @@ test('usage errors exit 2', async () => {
 test('ops fragments are read-only and named github_*', () => {
   assert.deepEqual(ops.map((o) => [o.name, o.access]), [['github_user', 'read'], ['github_repos', 'read']]);
 });
+
+test('GitHub connector against lmmock: headers, token, pagination, fallback and errors', async t => {
+  const {startMock} = await import('../scripts/lmmock.js');
+  const mock = await startMock('github', {strictHeaders:true});
+  t.after(() => mock.close());
+  // Only replace the destination origin; the connector builds headers and parses real responses.
+  const fetch = (url, init) => {
+    const remote = new URL(url);
+    assert.equal(remote.origin, 'https://api.github.com');
+    return globalThis.fetch(mock.origin + remote.pathname + remote.search, init);
+  };
+  for (const [owner, names] of [['acme',['a','b']], ['paged',['r1','r2','r3']], ['mike',['personal']]]) {
+    const result = await capture(['repos',owner,'--limit','3'], {fetch,exec:noGh});
+    assert.equal(result.code,0,result.stdout);
+    assert.deepEqual(result.envelope.result.names,names);
+  }
+  for (const [owner, code] of [['forbidden','GITHUB_HTTP'],['broken','GITHUB_HTTP'],['weird','INVALID_RESPONSE'],['unknown','GITHUB_HTTP']]) {
+    const result = await capture(['repos',owner], {fetch,exec:noGh});
+    assert.equal(result.code,1);
+    assert.equal(result.envelope.error.code,code);
+  }
+  setCred('github','api_key','test-token');
+  try {
+    const user = await capture(['user'], {fetch,exec:noGh});
+    assert.equal(user.code,0,user.stdout);
+    assert.equal(user.envelope.result.login,'octo');
+    mock.configure({apiKey:'different-test-token'});
+    const denied = await capture(['user'], {fetch,exec:noGh});
+    assert.equal(denied.code,1);
+    assert.match(denied.envelope.error.message,/HTTP 401/);
+    assert.ok(!denied.stdout.includes('test-token'));
+  } finally { deleteCred('github','api_key'); }
+});

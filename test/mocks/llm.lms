@@ -7,17 +7,21 @@ fn completion(x: Exchange) -> void implements Handler {
   x.set("last",x.request_json());
   let c = json_parse(config()); let mode = field(c,"mode"); let auth = x.header("Authorization");
   if (mode == "unauthorized" || (c.has("apiKey") && !secure_equal(auth,"Bearer " + field(c,"apiKey")))) { x.status(401); x.json("{\"error\":{\"message\":" + json_quote("denied " + auth + " Bearer different-secret-token") + ",\"type\":\"authentication_error\"}}"); break; }
-  if (mode == "rate-limit") { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\"}}"); break; }
+  let retry = false; if (mode == "retry") { retry = x.increment("llm-retry") == 1; }
+  if (mode == "rate-limit" || retry) { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\"}}"); break; }
   if (mode == "server-error") { x.status(503); x.json("{\"error\":{\"message\":\"unavailable\"}}"); break; }
   if (mode == "disconnect") { x.disconnect(); break; }
   if (mode == "bad-json") { x.json("{broken"); break; }
   if (mode == "timeout") { x.delay(1000); }
   let request = json_parse(x.body()); let model = "mock-agent"; if (request.has("model")) { model = field(request,"model"); }
+  if (mode == "unknown-model" || model == "unknown-model") { x.status(404); x.json("{\"error\":{\"message\":\"model not found\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}"); break; }
+  if (model == "overloaded") { x.status(429); x.set_header("Retry-After","1"); x.json("{\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\"}}"); break; }
   let content = "pong"; let reason = "stop"; let message = ""; let tool = false;
   let messages = request.get("messages"); let tool_result = false;
   for (i in range(0,messages.len())) { if (field(messages.at(i),"role") == "tool") { tool_result = true; content = "Tool result: " + field(messages.at(i),"content"); } }
   if (request.has("tools") && !tool_result) { tool = true; }
   if (mode == "ok" || mode == "echo" || mode == "timeout") { model = "served-model"; }
+  if (c.has("responseModel")) { model = field(c,"responseModel"); }
   if (mode == "echo") { content = str_substr(auth,7,str_len(auth)); }
   let tools = "[]";
   if (tool) {
@@ -37,6 +41,8 @@ fn completion(x: Exchange) -> void implements Handler {
 }
 @inspect
 fn inspect(x: Exchange) -> void implements Handler { let last = x.get("last"); if (last == "") { last = "{}"; } x.json(last); }
+route("POST","/chat/completions","chat");
+route("POST","/api/v1/chat/completions","chat");
 route("POST","/v1/chat/completions","chat");route("GET","/__inspect","inspect");
 end _lmcode_
 savedsl(p,ARGV[0]);

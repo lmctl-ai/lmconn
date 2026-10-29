@@ -1,0 +1,50 @@
+# GitHub REST fixture for lmclient github user/repos. Compile: lmscript examples/github.lms build/github.dslb
+# Config: {"apiKey":"test-token","strictHeaders":false}. Public repos allow anonymous access.
+# Routes: /user, /orgs/{owner}/repos, /users/{owner}/repos. Canned owners:
+# acme (two repos), paged (two pages), mike (user fallback), forbidden (403),
+# broken (500), weird (non-list); unknown owners return 404. No real GitHub calls.
+p = _lmcode_ schema="schema.json";
+fn error(x: Exchange, code: int, message: string) -> void { x.status(code); x.json("{\"message\":" + json_quote(message) + "}"); }
+fn headers_ok(x: Exchange, c: Json) -> bool {
+ let ok = true;
+ if (c.has("strictHeaders")) { if (c.get("strictHeaders").as_bool()) {
+  ok = x.header("Accept") == "application/vnd.github+json" && (x.header("User-Agent") == "lmclient" || x.header("User-Agent") == "lmconn") && x.header("X-GitHub-Api-Version") == "2022-11-28";
+ } }
+ return ok;
+}
+fn token_ok(x: Exchange, c: Json) -> bool {
+ let key = "test-token"; if (c.has("apiKey")) { key = c.get("apiKey").as_string(); }
+ return secure_equal(x.header("Authorization"), "Bearer " + key);
+}
+@user
+fn user(x: Exchange) -> void implements Handler {
+ let c = json_parse(config());
+ if (!headers_ok(x,c)) { error(x,400,"Missing GitHub request headers"); }
+ else { if (!token_ok(x,c)) { error(x,401,"Bad credentials"); }
+ else { x.json("{\"login\":\"octo\",\"name\":\"Octo Cat\",\"id\":583231,\"public_repos\":8}"); } }
+}
+@repos
+fn repos(x: Exchange) -> void implements Handler {
+ while (true) {
+  let c = json_parse(config());
+  if (!headers_ok(x,c)) { error(x,400,"Missing GitHub request headers"); break; }
+  if (x.header("Authorization") != "" && !token_ok(x,c)) { error(x,401,"Bad credentials"); break; }
+  let owner = x.param("owner");
+  if (owner == "forbidden") { error(x,403,"API rate limit exceeded"); break; }
+  if (owner == "broken") { x.status(500); x.send("oops"); break; }
+  if (owner == "weird") { x.json("{\"not\":\"a list\"}"); break; }
+  if (owner == "mike" && str_starts_with(x.path(),"/users/")) { x.json("[{\"name\":\"personal\",\"description\":\"d\",\"stargazers_count\":2}]"); break; }
+  if (owner == "acme") { x.json("[{\"name\":\"a\",\"description\":\"first\",\"stargazers_count\":5},{\"name\":\"b\",\"description\":null,\"stargazers_count\":0}]"); break; }
+  if (owner == "paged") {
+   if (x.query("page") == "2") { x.json("[{\"name\":\"r3\",\"stargazers_count\":3},{\"name\":\"r4\",\"stargazers_count\":4}]"); }
+   else { x.set_header("Link","<" + x.path() + "?per_page=" + url_encode(x.query("per_page")) + "&sort=full_name&page=2>; rel=\"next\""); x.json("[{\"name\":\"r1\",\"stargazers_count\":1},{\"name\":\"r2\",\"stargazers_count\":2}]"); }
+   break;
+  }
+  error(x,404,"Not Found"); break;
+ }
+}
+route("GET","/user","user");
+route("GET","/orgs/{owner}/repos","repos");
+route("GET","/users/{owner}/repos","repos");
+end _lmcode_
+savedsl(p,ARGV[0]);

@@ -1,10 +1,21 @@
 {
   "repo": "lmctl-ai/lmmock",
-  "commit": "be9138d7e31a2862048db0dfd6ac1ee91c8d2156",
+  "commit": "8308c436e1239fe9405d24ba66ea771d63a35021",
   "sha256": {
     "schema.json": "a7654e6cb25fb2c56d36a441adb0016db63d7fd466cdcdc32d11d588f4233ff4",
     "oauth.lms": "efb0a3d9e460d2614b8b6f915c7ed0c79d06514f021fef4bf77f8ade1eeee1c2",
     "connector-http.lms": "12422b16f880c2708aafd7f4ba8630a1f578c0422faa6a542c7f61262a38279c",
-    "llm.lms": "8b54f934a376be4d1f2a8fccd77a791d785367f8c531e4fd7d7798ed29e8f430"
+    "llm.lms": "c63b7d4d166a31e0d93b8e7208a9d898bb51bfa2a7a98abf322ddaa6209734a0",
+    "github.lms": "48d9b6a9e9c46e6b67c1aa53604f4ec22a9cee5fdb8a147b0763dd10eb07bb85",
+    "slack.lms": "a656df81b59c360d1cecea7a06f8804e13c0044f51435be5678a01c0e9689912",
+    "slack-client.json": "966dc39f16fbd3a5c3016e07497697c4ec786e0c52c3d9900003e81a41b40c81",
+    "discord.lms": "20549afcec30461418556864508dda87d425924cc3d54ba8e72ad57a8984ce50",
+    "discord-client.json": "80dc7e5c2d0ec89c69dad292c71adfb874dec331b36dfa87157eeafe53e60db1",
+    "telegram.lms": "f6f3470da69a4df48108e86425c97a05a0bc7b22d6e0bf3dea09072ddfeea2de",
+    "telegram-client.json": "8412be0bb73ff563ef621edef599bd55e85e9ddb6863899f10ec92b1daba7c86",
+    "jira.lms": "83140a60f1d0575d9abde364eecf0065ec118bb9ce4190f16fc11948cbcc6814",
+    "jira-client.json": "e6b4f30cbceef3833e757331b19b887609d135602711417f58a48690287ce057",
+    "stripe.lms": "e602dd2cedc91440b7d2b562d9c4df3e2620864a54b5592cd135a73fece1a8d4",
+    "stripe-client.json": "6898c6ef49519941bf1147e3f51c3a0be52769fdc33fa3363ca863a3be7f6721"
   }
 }

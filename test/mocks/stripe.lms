@@ -1,0 +1,78 @@
+# Stripe API fixture (api.stripe.com/v1/*), mined from n8n nodes/Stripe (helpers.ts: form-encoded bodies,
+# `https://api.stripe.com/v1${endpoint}`) and credentials/StripeApi ("Authorization: Bearer sk_...";
+# credential test GET /v1/charges). Default key sk_test_fixture (config {"secretKey": "..."}).
+# Requests are application/x-www-form-urlencoded; errors are {"error":{"type","message","code"?}}.
+# Faults: POST /v1/charges with amount=429 -> 429 rate_limit_error; amount=500 -> 500 api_error.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key)) { let t = j.get(key).to_json(); if (str_starts_with(t, "\"")) { v = j.get(key).as_string(); } else { v = t; } } return v; }
+fn arg(x: Exchange, key: string) -> string {
+ let b = str_trim(x.body()); let v = "";
+ if (str_starts_with(b, "{")) { v = field(json_parse(b), key); } else if (b != "") { v = form_get(b, key); }
+ if (v == "") { v = x.query(key); }
+ return v;
+}
+fn err(x: Exchange, code: int, type_: string, message: string) -> void { x.status(code); x.json("{\"error\":{\"type\":" + json_quote(type_) + ",\"message\":" + json_quote(message) + "}}"); }
+fn gate(x: Exchange) -> string {
+ let c = json_parse(config()); let want = "sk_test_fixture"; if (c.has("secretKey")) { want = field(c, "secretKey"); }
+ let auth = x.header("Authorization"); let state = "ok";
+ if (auth == "") { state = "missing"; } else if (!secure_equal(auth, "Bearer " + want)) { state = "invalid"; }
+ return state;
+}
+fn deny(x: Exchange, state: string) -> void {
+ if (state == "missing") { err(x, 401, "invalid_request_error", "You did not provide an API key. You need to provide your API key in the Authorization header, using Bearer auth (e.g. 'Authorization: Bearer YOUR_SECRET_KEY')."); }
+ else { err(x, 401, "invalid_request_error", "Invalid API Key provided: sk_test_***"); }
+}
+fn customer_json(id: string, email: string, name: string) -> string {
+ return "{\"id\":" + json_quote(id) + ",\"object\":\"customer\",\"email\":" + json_quote(email) + ",\"name\":" + json_quote(name) + ",\"created\":1700000000,\"livemode\":false,\"currency\":\"usd\",\"balance\":0}";
+}
+fn charge_json(id: string, amount: string, currency: string) -> string {
+ return "{\"id\":" + json_quote(id) + ",\"object\":\"charge\",\"amount\":" + amount + ",\"currency\":" + json_quote(currency) + ",\"status\":\"succeeded\",\"paid\":true,\"captured\":true,\"created\":1700000000,\"livemode\":false}";
+}
+@balance
+fn balance(x: Exchange) -> void implements Handler {
+ let g = gate(x);
+ if (g != "ok") { deny(x, g); } else { x.json("{\"object\":\"balance\",\"available\":[{\"amount\":123450,\"currency\":\"usd\"}],\"pending\":[{\"amount\":0,\"currency\":\"usd\"}],\"livemode\":false}"); }
+}
+@customers
+fn customers(x: Exchange) -> void implements Handler {
+ let g = gate(x);
+ if (g != "ok") { deny(x, g); }
+ else if (x.method() == "GET") { x.json("{\"object\":\"list\",\"url\":\"/v1/customers\",\"has_more\":false,\"data\":[" + customer_json("cus_fixture1", "alice@example.test", "Alice Fixture") + "]}"); }
+ else {
+  let email = arg(x, "email"); let name = arg(x, "name");
+  if (email == "" && name == "") { err(x, 400, "invalid_request_error", "Missing required param: email or name."); }
+  else { let n = x.increment("stripe-customer") + 1; x.json(customer_json("cus_fixture" + str(n), email, name)); }
+ }
+}
+@customer
+fn customer(x: Exchange) -> void implements Handler {
+ let g = gate(x); let id = x.param("id");
+ if (g != "ok") { deny(x, g); }
+ else if (id == "cus_fixture1") { x.json(customer_json("cus_fixture1", "alice@example.test", "Alice Fixture")); }
+ else { x.status(404); x.json("{\"error\":{\"type\":\"invalid_request_error\",\"code\":\"resource_missing\",\"param\":\"id\",\"message\":" + json_quote("No such customer: '" + id + "'") + "}}"); }
+}
+@charges
+fn charges(x: Exchange) -> void implements Handler {
+ let g = gate(x);
+ if (g != "ok") { deny(x, g); }
+ else if (x.method() == "GET") { x.json("{\"object\":\"list\",\"url\":\"/v1/charges\",\"has_more\":false,\"data\":[" + charge_json("ch_fixture1", "2000", "usd") + "]}"); }
+ else {
+  let amount = arg(x, "amount"); let currency = arg(x, "currency");
+  if (amount == "429") { x.set_header("Retry-After", "1"); err(x, 429, "rate_limit_error", "Request rate limit exceeded. Please retry after a short delay."); }
+  else if (amount == "500") { err(x, 500, "api_error", "An error occurred while processing the request."); }
+  else if (!str_is_int(amount) || currency == "") { x.status(400); x.json("{\"error\":{\"type\":\"invalid_request_error\",\"param\":\"amount\",\"message\":\"Invalid integer: " + amount + "\"}}"); }
+  else { let n = x.increment("stripe-charge") + 1; x.json(charge_json("ch_fixture" + str(n), amount, currency)); }
+ }
+}
+@tokens
+fn tokens(x: Exchange) -> void implements Handler {
+ let g = gate(x);
+ if (g != "ok") { deny(x, g); } else { x.json("{\"id\":\"tok_fixture\",\"object\":\"token\",\"type\":\"card\",\"used\":false,\"livemode\":false,\"card\":{\"brand\":\"Visa\",\"last4\":\"4242\",\"exp_month\":12,\"exp_year\":2030}}"); }
+}
+route("GET", "/v1/balance", "balance");
+route("GET", "/v1/customers", "customers"); route("POST", "/v1/customers", "customers");
+route("GET", "/v1/customers/{id}", "customer");
+route("GET", "/v1/charges", "charges"); route("POST", "/v1/charges", "charges");
+route("POST", "/v1/tokens", "tokens");
+end _lmcode_
+savedsl(p, ARGV[0]);

@@ -1,0 +1,164 @@
+{
+  "steps": [
+    {
+      "name": "myself (credential test)",
+      "method": "GET",
+      "path": "/rest/api/2/myself",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "json": {
+        "displayName": "Fixture User",
+        "emailAddress": "fixture@example.test",
+        "active": true
+      }
+    },
+    {
+      "name": "get issue",
+      "method": "GET",
+      "path": "/rest/api/2/issue/FIX-1",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "json": {
+        "key": "FIX-1",
+        "fields.summary": "Fixture issue one",
+        "fields.status.name": "To Do",
+        "fields.project.key": "FIX"
+      }
+    },
+    {
+      "name": "create issue",
+      "method": "POST",
+      "path": "/rest/api/2/issue",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "body": {
+        "fields": {
+          "project": {
+            "key": "FIX"
+          },
+          "summary": "Created by lmmock",
+          "issuetype": {
+            "name": "Task"
+          }
+        }
+      },
+      "status": 201,
+      "json": {
+        "key": "FIX-3"
+      },
+      "capture": {
+        "key": "key"
+      }
+    },
+    {
+      "name": "search jql",
+      "method": "GET",
+      "path": "/rest/api/2/search?jql=project%3DFIX&maxResults=50",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "json": {
+        "total": 2,
+        "issues.0.key": "FIX-1",
+        "issues.1.fields.status.name": "Done"
+      }
+    },
+    {
+      "name": "projects",
+      "method": "GET",
+      "path": "/rest/api/2/project",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "json": {
+        "0.key": "FIX",
+        "0.projectTypeKey": "software"
+      }
+    },
+    {
+      "name": "create without summary",
+      "method": "POST",
+      "path": "/rest/api/2/issue",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "body": {
+        "fields": {
+          "project": {
+            "key": "FIX"
+          }
+        }
+      },
+      "status": 400,
+      "json": {
+        "errors.summary": "You must specify a summary of the issue."
+      }
+    },
+    {
+      "name": "unknown issue",
+      "method": "GET",
+      "path": "/rest/api/2/issue/FIX-999",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "status": 404,
+      "json": {
+        "errorMessages.0": "Issue does not exist or you do not have permission to see it."
+      }
+    },
+    {
+      "name": "missing credentials",
+      "method": "GET",
+      "path": "/rest/api/2/myself",
+      "status": 401,
+      "json": {
+        "errorMessages.0": "Client must be authenticated to access this resource."
+      }
+    },
+    {
+      "name": "wrong api token",
+      "method": "GET",
+      "path": "/rest/api/2/myself",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6d3JvbmctdG9rZW4="
+      },
+      "status": 401
+    },
+    {
+      "name": "bearer instead of basic",
+      "method": "GET",
+      "path": "/rest/api/2/myself",
+      "headers": {
+        "Authorization": "Bearer fixture-api-token"
+      },
+      "status": 401
+    },
+    {
+      "name": "fault: rate limited issue",
+      "method": "GET",
+      "path": "/rest/api/2/issue/FIX-429",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "status": 429,
+      "json": {
+        "errorMessages.0": "Rate limit exceeded."
+      }
+    },
+    {
+      "name": "fault: server error",
+      "method": "GET",
+      "path": "/rest/api/2/issue/FIX-500",
+      "headers": {
+        "Authorization": "Basic Zml4dHVyZUBleGFtcGxlLnRlc3Q6Zml4dHVyZS1hcGktdG9rZW4="
+      },
+      "status": 500,
+      "json": {
+        "errorMessages.0": "Internal server error"
+      }
+    }
+  ]
+}

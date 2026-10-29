@@ -1,0 +1,196 @@
+{
+  "steps": [
+    {
+      "name": "credential test: my guilds",
+      "method": "GET",
+      "path": "/api/v10/users/@me/guilds",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "json": {
+        "0.id": "100000000000000001",
+        "0.name": "Fixture Guild"
+      }
+    },
+    {
+      "name": "guild channels",
+      "method": "GET",
+      "path": "/api/v10/guilds/100000000000000001/channels",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "json": {
+        "0.name": "general",
+        "1.id": "200000000000000002"
+      }
+    },
+    {
+      "name": "guild members",
+      "method": "GET",
+      "path": "/api/v10/guilds/100000000000000001/members?limit=10",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "json": {
+        "0.user.username": "alice"
+      }
+    },
+    {
+      "name": "send message",
+      "method": "POST",
+      "path": "/api/v10/channels/200000000000000001/messages",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "body": {
+        "content": "hello from lmmock"
+      },
+      "json": {
+        "content": "hello from lmmock",
+        "channel_id": "200000000000000001",
+        "author.bot": true
+      },
+      "capture": {
+        "message_id": "id"
+      }
+    },
+    {
+      "name": "list messages",
+      "method": "GET",
+      "path": "/api/v10/channels/200000000000000001/messages?limit=2",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "json": {
+        "0.content": "second fixture message",
+        "1.id": "400000000000000001"
+      }
+    },
+    {
+      "name": "empty message",
+      "method": "POST",
+      "path": "/api/v10/channels/200000000000000001/messages",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "body": {
+        "content": ""
+      },
+      "status": 400,
+      "json": {
+        "code": 50006
+      }
+    },
+    {
+      "name": "unknown channel",
+      "method": "POST",
+      "path": "/api/v10/channels/200000000000000777/messages",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "body": {
+        "content": "x"
+      },
+      "status": 404,
+      "json": {
+        "code": 10003,
+        "message": "Unknown Channel"
+      }
+    },
+    {
+      "name": "missing token",
+      "method": "GET",
+      "path": "/api/v10/users/@me/guilds",
+      "status": 401,
+      "json": {
+        "message": "401: Unauthorized",
+        "code": 0
+      }
+    },
+    {
+      "name": "wrong token",
+      "method": "GET",
+      "path": "/api/v10/users/@me/guilds",
+      "headers": {
+        "Authorization": "Bot wrong-token"
+      },
+      "status": 401,
+      "json": {
+        "message": "401: Unauthorized"
+      }
+    },
+    {
+      "name": "bearer instead of Bot is rejected",
+      "method": "GET",
+      "path": "/api/v10/users/@me/guilds",
+      "headers": {
+        "Authorization": "Bearer fixture-bot-token"
+      },
+      "status": 401
+    },
+    {
+      "name": "fault: rate limit",
+      "method": "POST",
+      "path": "/api/v10/channels/200000000000000429/messages",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "body": {
+        "content": "x"
+      },
+      "status": 429,
+      "json": {
+        "message": "You are being rate limited.",
+        "global": false
+      }
+    },
+    {
+      "name": "fault: server error",
+      "method": "POST",
+      "path": "/api/v10/channels/200000000000000500/messages",
+      "headers": {
+        "Authorization": "Bot fixture-bot-token"
+      },
+      "body": {
+        "content": "x"
+      },
+      "status": 500,
+      "json": {
+        "message": "500: Internal Server Error"
+      }
+    },
+    {
+      "name": "webhook without wait",
+      "method": "POST",
+      "path": "/api/webhooks/600000000000000001/fixture-webhook-token",
+      "body": {
+        "content": "from webhook"
+      },
+      "status": 204
+    },
+    {
+      "name": "webhook with wait",
+      "method": "POST",
+      "path": "/api/webhooks/600000000000000001/fixture-webhook-token?wait=true",
+      "body": {
+        "content": "from webhook"
+      },
+      "json": {
+        "content": "from webhook",
+        "channel_id": "200000000000000001"
+      }
+    },
+    {
+      "name": "webhook wrong token",
+      "method": "POST",
+      "path": "/api/webhooks/600000000000000001/wrong-token",
+      "body": {
+        "content": "x"
+      },
+      "status": 401,
+      "json": {
+        "code": 50027
+      }
+    }
+  ]
+}

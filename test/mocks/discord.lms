@@ -1,0 +1,73 @@
+# Discord REST fixture (discord.com/api/v10/* and incoming webhooks), mined from n8n nodes/Discord/v2
+# (transport/discord.api.ts) and credentials/DiscordBotApi + DiscordWebhookApi.
+# Auth: "Authorization: Bot <token>" (default fixture-bot-token; config {"botToken": "..."}); webhooks
+# authenticate by the token in the path (fixture-webhook-token) and need no header.
+# Faults: channel 200000000000000429 -> 429 rate limit with retry_after; channel 200000000000000500 -> 500;
+# unknown channel -> 404 code 10003.
+p = _lmcode_ schema="schema.json";
+fn field(j: Json, key: string) -> string { let v = ""; if (j.has(key)) { let t = j.get(key).to_json(); if (str_starts_with(t, "\"")) { v = j.get(key).as_string(); } else { v = t; } } return v; }
+fn body_field(x: Exchange, key: string) -> string { let b = str_trim(x.body()); let v = ""; if (str_starts_with(b, "{")) { v = field(json_parse(b), key); } return v; }
+fn authorized(x: Exchange) -> bool {
+ let c = json_parse(config()); let want = "fixture-bot-token"; if (c.has("botToken")) { want = field(c, "botToken"); }
+ return secure_equal(x.header("Authorization"), "Bot " + want);
+}
+fn unauthorized(x: Exchange) -> void { x.status(401); x.json("{\"message\":\"401: Unauthorized\",\"code\":0}"); }
+fn known_channel(id: string) -> bool { return id == "200000000000000001" || id == "200000000000000002"; }
+fn message_json(id: string, channel: string, content: string) -> string {
+ return "{\"id\":" + json_quote(id) + ",\"type\":0,\"content\":" + json_quote(content) + ",\"channel_id\":" + json_quote(channel) + ",\"author\":{\"id\":\"500000000000000001\",\"username\":\"lmmock\",\"bot\":true},\"timestamp\":\"2026-10-29T00:00:00.000000+00:00\",\"embeds\":[],\"attachments\":[]}";
+}
+@my_guilds
+fn my_guilds(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); } else { x.json("[{\"id\":\"100000000000000001\",\"name\":\"Fixture Guild\",\"owner\":true,\"permissions\":\"8\"}]"); }
+}
+@guild_channels
+fn guild_channels(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); }
+ else if (x.param("guild") != "100000000000000001") { x.status(404); x.json("{\"message\":\"Unknown Guild\",\"code\":10004}"); }
+ else { x.json("[{\"id\":\"200000000000000001\",\"type\":0,\"name\":\"general\",\"guild_id\":\"100000000000000001\",\"position\":0},{\"id\":\"200000000000000002\",\"type\":0,\"name\":\"alerts\",\"guild_id\":\"100000000000000001\",\"position\":1}]"); }
+}
+@guild_members
+fn guild_members(x: Exchange) -> void implements Handler {
+ if (!authorized(x)) { unauthorized(x); }
+ else if (x.param("guild") != "100000000000000001") { x.status(404); x.json("{\"message\":\"Unknown Guild\",\"code\":10004}"); }
+ else { x.json("[{\"user\":{\"id\":\"300000000000000001\",\"username\":\"alice\",\"global_name\":\"Alice Fixture\"},\"roles\":[],\"joined_at\":\"2026-01-01T00:00:00.000000+00:00\"}]"); }
+}
+@send_message
+fn send_message(x: Exchange) -> void implements Handler {
+ let channel = x.param("channel");
+ if (!authorized(x)) { unauthorized(x); }
+ else if (channel == "200000000000000429") { x.status(429); x.set_header("Retry-After", "2"); x.json("{\"message\":\"You are being rate limited.\",\"retry_after\":1.5,\"global\":false}"); }
+ else if (channel == "200000000000000500") { x.status(500); x.json("{\"message\":\"500: Internal Server Error\",\"code\":0}"); }
+ else if (!known_channel(channel)) { x.status(404); x.json("{\"message\":\"Unknown Channel\",\"code\":10003}"); }
+ else {
+  let content = body_field(x, "content");
+  if (content == "" && body_field(x, "embeds") == "") { x.status(400); x.json("{\"message\":\"Cannot send an empty message\",\"code\":50006}"); }
+  else { let n = x.increment("discord-message"); x.json(message_json("40000000000000000" + str(n), channel, content)); }
+ }
+}
+@list_messages
+fn list_messages(x: Exchange) -> void implements Handler {
+ let channel = x.param("channel");
+ if (!authorized(x)) { unauthorized(x); }
+ else if (!known_channel(channel)) { x.status(404); x.json("{\"message\":\"Unknown Channel\",\"code\":10003}"); }
+ else { x.json("[" + message_json("400000000000000002", channel, "second fixture message") + "," + message_json("400000000000000001", channel, "first fixture message") + "]"); }
+}
+@webhook
+fn webhook(x: Exchange) -> void implements Handler {
+ let c = json_parse(config()); let want = "fixture-webhook-token"; if (c.has("webhookToken")) { want = field(c, "webhookToken"); }
+ if (!secure_equal(x.param("token"), want)) { x.status(401); x.json("{\"message\":\"Invalid Webhook Token\",\"code\":50027}"); }
+ else {
+  let content = body_field(x, "content");
+  if (content == "" && body_field(x, "embeds") == "") { x.status(400); x.json("{\"message\":\"Cannot send an empty message\",\"code\":50006}"); }
+  else if (x.query("wait") == "true") { let n = x.increment("discord-message"); x.json(message_json("40000000000000000" + str(n), "200000000000000001", content)); }
+  else { x.status(204); }
+ }
+}
+route("GET", "/api/v10/users/@me/guilds", "my_guilds");
+route("GET", "/api/v10/guilds/{guild}/channels", "guild_channels");
+route("GET", "/api/v10/guilds/{guild}/members", "guild_members");
+route("POST", "/api/v10/channels/{channel}/messages", "send_message");
+route("GET", "/api/v10/channels/{channel}/messages", "list_messages");
+route("POST", "/api/webhooks/{id}/{token}", "webhook"); route("POST", "/api/v10/webhooks/{id}/{token}", "webhook");
+end _lmcode_
+savedsl(p, ARGV[0]);

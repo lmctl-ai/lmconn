@@ -1,0 +1,167 @@
+{
+  "steps": [
+    {
+      "name": "auth.test",
+      "method": "POST",
+      "path": "/api/auth.test",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "json": {
+        "ok": true,
+        "team_id": "T0FIXTURE",
+        "user_id": "U0FIXTURE"
+      }
+    },
+    {
+      "name": "chat.postMessage",
+      "method": "POST",
+      "path": "/api/chat.postMessage",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "body": {
+        "channel": "C0GENERAL",
+        "text": "hello from lmmock"
+      },
+      "json": {
+        "ok": true,
+        "channel": "C0GENERAL",
+        "message.text": "hello from lmmock",
+        "message.bot_id": "B0FIXTURE"
+      },
+      "capture": {
+        "ts": "ts"
+      }
+    },
+    {
+      "name": "chat.update",
+      "method": "POST",
+      "path": "/api/chat.update",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "body": {
+        "channel": "C0GENERAL",
+        "ts": "${ts}",
+        "text": "edited"
+      },
+      "json": {
+        "ok": true,
+        "ts": "${ts}",
+        "text": "edited"
+      }
+    },
+    {
+      "name": "conversations.list",
+      "method": "GET",
+      "path": "/api/conversations.list?limit=100",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "json": {
+        "ok": true,
+        "channels.0.id": "C0GENERAL",
+        "channels.1.name": "random",
+        "response_metadata.next_cursor": ""
+      }
+    },
+    {
+      "name": "users.list",
+      "method": "GET",
+      "path": "/api/users.list",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "json": {
+        "ok": true,
+        "members.1.name": "alice"
+      }
+    },
+    {
+      "name": "users.info",
+      "method": "GET",
+      "path": "/api/users.info?user=U0ALICE",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "json": {
+        "ok": true,
+        "user.profile.email": "alice@example.test"
+      }
+    },
+    {
+      "name": "users.info unknown",
+      "method": "GET",
+      "path": "/api/users.info?user=U0NOBODY",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "json": {
+        "ok": false,
+        "error": "user_not_found"
+      }
+    },
+    {
+      "name": "missing token is not_authed (HTTP 200)",
+      "method": "POST",
+      "path": "/api/chat.postMessage",
+      "body": {
+        "channel": "C0GENERAL",
+        "text": "x"
+      },
+      "json": {
+        "ok": false,
+        "error": "not_authed"
+      }
+    },
+    {
+      "name": "wrong token is invalid_auth (HTTP 200)",
+      "method": "POST",
+      "path": "/api/chat.postMessage",
+      "headers": {
+        "Authorization": "Bearer xoxb-wrong"
+      },
+      "body": {
+        "channel": "C0GENERAL",
+        "text": "x"
+      },
+      "json": {
+        "ok": false,
+        "error": "invalid_auth"
+      }
+    },
+    {
+      "name": "missing channel",
+      "method": "POST",
+      "path": "/api/chat.postMessage",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "body": {
+        "text": "x"
+      },
+      "json": {
+        "ok": false,
+        "error": "channel_not_found"
+      }
+    },
+    {
+      "name": "fault: rate limited channel",
+      "method": "POST",
+      "path": "/api/chat.postMessage",
+      "headers": {
+        "Authorization": "Bearer xoxb-fixture-token"
+      },
+      "body": {
+        "channel": "C0RATELIMIT",
+        "text": "x"
+      },
+      "status": 429,
+      "json": {
+        "ok": false,
+        "error": "ratelimited"
+      }
+    }
+  ]
+}
