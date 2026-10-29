@@ -1,3 +1,4 @@
+// lmclient vendors a copy at scripts/mock-idp.js (the self-contained revision 2b8f97d of this file); sync on change.
 // The strict OAuth2 handlers live in test/mocks/oauth.lms and run in lmmock.
 import { startMock } from './lmmock.js';
 export async function createMockIdP(options = {}) {
