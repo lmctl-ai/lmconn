@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmmock",
-  "commit": "8308c436e1239fe9405d24ba66ea771d63a35021",
+  "commit": "7a9179f446f03f4a122ab789af8bf432d939cc86",
   "sha256": {
     "schema.json": "a7654e6cb25fb2c56d36a441adb0016db63d7fd466cdcdc32d11d588f4233ff4",
     "oauth.lms": "efb0a3d9e460d2614b8b6f915c7ed0c79d06514f021fef4bf77f8ade1eeee1c2",
@@ -16,6 +16,18 @@
     "jira.lms": "83140a60f1d0575d9abde364eecf0065ec118bb9ce4190f16fc11948cbcc6814",
     "jira-client.json": "e6b4f30cbceef3833e757331b19b887609d135602711417f58a48690287ce057",
     "stripe.lms": "e602dd2cedc91440b7d2b562d9c4df3e2620864a54b5592cd135a73fece1a8d4",
-    "stripe-client.json": "6898c6ef49519941bf1147e3f51c3a0be52769fdc33fa3363ca863a3be7f6721"
+    "stripe-client.json": "6898c6ef49519941bf1147e3f51c3a0be52769fdc33fa3363ca863a3be7f6721",
+    "notion.lms": "47773ae2476784afbd595a3ba84d12481f56a25e65d34e047e64c941154320ac",
+    "notion-client.json": "a9376a17768fa14386b00255420c891a9968b18916e84a51f236e033577bf8bb",
+    "airtable.lms": "ee37e200ec4053ca282f01ed6702be99e7007838941a5bfb5e029fd71d96c28f",
+    "airtable-client.json": "34cd1d4edd2652158b9e71b212f08f05cf150927c97da001c89b3c7966d80c78",
+    "hubspot.lms": "d2b706215b672dfd11c61eb6b98d703c3f28db60eacf5d0bb895cd09668ede81",
+    "hubspot-client.json": "2f37054bcc8c958956ae9ded38065078529af453f550236a8ab7bfcbd73f9136",
+    "gitlab.lms": "12c0387f2983e2c37c9f87843b1822c87d8bb0d63930b9796b72b5884aae6328",
+    "gitlab-client.json": "311956576fd114f5a5ee2301743ea5a873dc6a93af761da4668966a726a2f733",
+    "asana.lms": "67eebac6e94300365064bfc36c54180a9bbab7024e73f97dfd58120c55042783",
+    "asana-client.json": "d3c3e7f8c892f23f607f20d149f7e0635e81ba5b2d7d25d4fd222cf87eb8946c",
+    "trello.lms": "6513de524f531e9b7957285c33b24271acd74eb681e49692befa6f5b52eff22f",
+    "trello-client.json": "5c6f99cf23d7e97f433d974ad85cb65dbd9cac301894a8c53fa6f6c0c578935f"
   }
 }

@@ -1,0 +1,159 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/account-info/v3/details",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "portalId": 12345
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/crm/v3/objects/contacts/search",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "results.0.id": "1"
+      },
+      "body": {},
+      "capture": {
+        "cursor": "paging.next.after"
+      }
+    },
+    {
+      "name": "list second page",
+      "path": "/crm/v3/objects/contacts/search",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "results.0.id": "2"
+      },
+      "body": {
+        "after": "${cursor}"
+      }
+    },
+    {
+      "name": "create",
+      "path": "/crm/v3/objects/contacts",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {
+        "properties": {
+          "email": "fixture@example.test",
+          "firstname": "Fixture"
+        }
+      },
+      "status": 201,
+      "json": {
+        "properties.firstname": "Fixture"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/crm/v3/objects/contacts/${id}",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "properties.firstname": "Fixture"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/crm/v3/objects/contacts/missing",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "status": "error",
+        "message": "Resource not found",
+        "category": "VALIDATION_ERROR",
+        "correlationId": "fixture-error"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/crm/v3/objects/contacts",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {},
+      "status": 400,
+      "json": {
+        "status": "error",
+        "message": "Missing required fields",
+        "category": "VALIDATION_ERROR",
+        "correlationId": "fixture-error"
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/account-info/v3/details",
+      "status": 401,
+      "json": {
+        "status": "error",
+        "message": "Invalid credentials",
+        "category": "INVALID_AUTHENTICATION",
+        "correlationId": "fixture-error"
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/account-info/v3/details",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "status": "error",
+        "message": "Invalid credentials",
+        "category": "INVALID_AUTHENTICATION",
+        "correlationId": "fixture-error"
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/account-info/v3/details",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "status": "error",
+        "message": "Rate limit exceeded",
+        "category": "RATE_LIMITS",
+        "correlationId": "fixture-error"
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/account-info/v3/details",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "status": "error",
+        "message": "Fixture server failure",
+        "category": "VALIDATION_ERROR",
+        "correlationId": "fixture-error"
+      }
+    }
+  ]
+}

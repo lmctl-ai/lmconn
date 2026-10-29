@@ -11,7 +11,7 @@ import {startMock} from '../scripts/lmmock.js';
 const exec = promisify(execFile);
 const cli = fileURLToPath(new URL('../bin/lmconn.js', import.meta.url));
 const at = (value, path) => path.split('.').reduce((v, key) => v?.[key], value);
-for (const service of ['slack','discord','telegram','jira','stripe']) {
+for (const service of ['slack','discord','telegram','jira','stripe','notion','airtable','hubspot','gitlab','asana','trello']) {
  test(`${service}: real HTTP connector success, authentication and fault contracts`, async t => {
   const dir = mkdtempSync(join(tmpdir(), 'lmconn-service-'));
   t.after(() => rmSync(dir, {recursive:true, force:true}));
@@ -38,6 +38,7 @@ for (const service of ['slack','discord','telegram','jira','stripe']) {
    const result = envelope.result;
    assert.equal(result.status,step.status || 200);
    assert.equal(result.ok,result.status >= 200 && result.status < 300);
+   if (step.contains) assert.ok((result.bodyText ?? JSON.stringify(result.bodyJson)).includes(step.contains));
    for (const [path,expected] of Object.entries(step.json || {})) assert.deepEqual(at(result.bodyJson,path),expected,path);
    for (const [key,path] of Object.entries(step.capture || {})) {
     vars[key] = at(result.bodyJson,path); assert.notEqual(vars[key],undefined,path);

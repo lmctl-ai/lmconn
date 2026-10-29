@@ -16,3 +16,5 @@ dates written out (2026-10-28), link related pages by relative path.
 
 - [lmmock fixture migration](lmmock-migration-2026-10-29.md): scripted HTTP/LLM/OAuth mocks, failure cases, portable lifecycle and fixture pins.
 - [lmmock coverage review](../docs/lmmock-coverage.md): connector inventory, service contract tests, remaining gaps, and lmscript Actions runner.
+
+- Six more annotated lmmock HTTP presets are vendored: Notion, Airtable, HubSpot, GitLab, Asana and Trello. Shared suites add 69 cases for auth, pagination, stateful create/read and faults. CI still runs via test.lms after npm installs lmctl/lmscript.

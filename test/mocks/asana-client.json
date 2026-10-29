@@ -1,0 +1,162 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/api/1.0/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "data.gid": "user-fixture"
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/api/1.0/tasks",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "data.0.gid": "task-1"
+      },
+      "capture": {
+        "cursor": "next_page.offset"
+      }
+    },
+    {
+      "name": "list second page",
+      "path": "/api/1.0/tasks?offset=${cursor}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "data.0.gid": "task-2",
+        "next_page": null
+      }
+    },
+    {
+      "name": "create",
+      "path": "/api/1.0/tasks",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {
+        "data": {
+          "name": "Created task",
+          "workspace": "workspace-fixture"
+        }
+      },
+      "status": 201,
+      "json": {
+        "data.name": "Created task"
+      },
+      "capture": {
+        "id": "data.gid"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/api/1.0/tasks/${id}",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "data.name": "Created task"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/api/1.0/tasks/missing",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "errors": [
+          {
+            "message": "Resource not found"
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/api/1.0/tasks",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {},
+      "status": 400,
+      "json": {
+        "errors": [
+          {
+            "message": "Missing required fields"
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/api/1.0/users/me",
+      "status": 401,
+      "json": {
+        "errors": [
+          {
+            "message": "Invalid credentials"
+          }
+        ]
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/api/1.0/users/me",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "errors": [
+          {
+            "message": "Invalid credentials"
+          }
+        ]
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/api/1.0/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "errors": [
+          {
+            "message": "Rate limit exceeded"
+          }
+        ]
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/api/1.0/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "errors": [
+          {
+            "message": "Fixture server failure"
+          }
+        ]
+      }
+    }
+  ]
+}

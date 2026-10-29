@@ -1,0 +1,124 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/1/members/me?key=fixture-key&token=fixture-token",
+      "headers": {},
+      "json": {
+        "id": "member-fixture"
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/1/boards/board-fixture/cards?key=fixture-key&token=fixture-token",
+      "method": "GET",
+      "headers": {},
+      "json": {
+        "0.id": "card-1"
+      }
+    },
+    {
+      "name": "pagination terminates",
+      "path": "/1/boards/board-fixture/cards?key=fixture-key&token=fixture-token&before=card-1",
+      "contains": "[]"
+    },
+    {
+      "name": "create",
+      "path": "/1/cards?key=fixture-key&token=fixture-token",
+      "method": "POST",
+      "headers": {},
+      "body": {
+        "name": "Created card",
+        "idList": "list-fixture"
+      },
+      "status": 200,
+      "json": {
+        "name": "Created card"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/1/cards/${id}?key=fixture-key&token=fixture-token",
+      "headers": {},
+      "json": {
+        "name": "Created card"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/1/cards/missing?key=fixture-key&token=fixture-token",
+      "headers": {},
+      "status": 404,
+      "json": {
+        "message": "Resource not found"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/1/cards?key=fixture-key&token=fixture-token",
+      "method": "POST",
+      "headers": {},
+      "body": {},
+      "status": 400,
+      "json": {
+        "message": "Missing required fields"
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/1/members/me",
+      "status": 401,
+      "json": {
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/1/members/me?key=fixture-key&token=wrong",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/1/members/me?key=fixture-key&token=fixture-token",
+      "headers": {
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "message": "Rate limit exceeded"
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/1/members/me?key=fixture-key&token=fixture-token",
+      "headers": {
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "message": "Fixture server failure"
+      }
+    },
+    {
+      "name": "n8n token credential test",
+      "path": "/1/tokens/fixture-token/member?key=fixture-key&token=fixture-token",
+      "json": {
+        "id": "member-fixture"
+      }
+    },
+    {
+      "name": "wrong path token",
+      "path": "/1/tokens/wrong/member?key=fixture-key&token=fixture-token",
+      "status": 401
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+# asana HTTP subset for n8n integration tests. Synthetic credentials only.
+# Config: {"token":"fixture-token","key":"fixture-key"}. X-Lmmock-Fault: 429 or 500.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); }
+ } return value;
+}
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; let key = "fixture-key";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ if (c.has("key")) { key = c.get("key").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"errors\": [{\"message\": \"Invalid credentials\"}]}"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); x.status(429); x.json("{\"errors\": [{\"message\": \"Rate limit exceeded\"}]}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"errors\": [{\"message\": \"Fixture server failure\"}]}"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"data\": {\"gid\": \"user-fixture\", \"name\": \"Fixture User\", \"resource_type\": \"user\"}}"); } }
+@list_items
+fn list_items(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.query("offset") == "page2") { x.json("{\"data\": [{\"gid\": \"task-2\", \"name\": \"Second\", \"resource_type\": \"task\"}], \"next_page\": null}"); } else { x.json("{\"data\": [{\"gid\": \"task-1\", \"name\": \"First\", \"resource_type\": \"task\"}], \"next_page\": {\"offset\": \"page2\", \"path\": \"/tasks?offset=page2\", \"uri\": \"" + "http://" + x.header("Host") + "/api/1.0/tasks?offset=page2" + "\"}}"); }
+ }
+}
+@create_item
+fn create_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (!b.has("data") || !b.get("data").has("name")) { x.status(400); x.json("{\"errors\": [{\"message\": \"Missing required fields\"}]}"); }
+  else {
+   let id = "created-" + str(x.increment("ids"));
+   let item = "{\"data\":{\"gid\":" + json_quote(id) + ",\"name\":" + b.get("data").get("name").to_json() + ",\"resource_type\":\"task\",\"completed\":false}}";
+   x.set("item:" + id, item); x.status(201); x.json(item);
+  }
+ }
+}
+@get_item
+fn get_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let item = x.get("item:" + x.param("id"));
+  if (item == "") { x.status(404); x.json("{\"errors\": [{\"message\": \"Resource not found\"}]}"); }
+  else { x.json(item); }
+ }
+}
+route("GET", "/api/1.0/users/me", "identity");
+route("GET", "/api/1.0/tasks", "list_items");
+route("POST", "/api/1.0/tasks", "create_item");
+route("GET", "/api/1.0/tasks/{id}", "get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);

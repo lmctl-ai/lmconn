@@ -35,7 +35,7 @@ jobs:
             *) exit 1 ;;
           esac
           mkdir -p "$RUNNER_TEMP/lmmock"
-          gh release download v0.1.13 --repo lmctl-ai/lmmock --pattern "$asset" --pattern SHA256SUMS --dir "$RUNNER_TEMP/lmmock"
+          gh release download v0.1.14 --repo lmctl-ai/lmmock --pattern "$asset" --pattern SHA256SUMS --dir "$RUNNER_TEMP/lmmock"
           node --input-type=module - "$RUNNER_TEMP/lmmock" "$asset" <<'JS'
           import fs from 'node:fs'; import crypto from 'node:crypto'; import path from 'node:path';
           const [dir,asset]=process.argv.slice(2);

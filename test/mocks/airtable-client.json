@@ -1,0 +1,154 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/v0/meta/whoami",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "id": "usrFixture"
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/v0/appFixture/tblFixture",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "records.0.id": "rec1"
+      },
+      "capture": {
+        "cursor": "offset"
+      }
+    },
+    {
+      "name": "list second page",
+      "path": "/v0/appFixture/tblFixture?offset=${cursor}",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "records.0.id": "rec2"
+      }
+    },
+    {
+      "name": "create",
+      "path": "/v0/appFixture/tblFixture",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {
+        "fields": {
+          "Name": "Created record"
+        }
+      },
+      "status": 200,
+      "json": {
+        "fields.Name": "Created record"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/v0/appFixture/tblFixture/${id}",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "json": {
+        "fields.Name": "Created record"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/v0/appFixture/tblFixture/missing",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "error": {
+          "type": "NOT_FOUND",
+          "message": "Resource not found"
+        }
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/v0/appFixture/tblFixture",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": {},
+      "status": 400,
+      "json": {
+        "error": {
+          "type": "INVALID_REQUEST_UNKNOWN",
+          "message": "Missing required fields"
+        }
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/v0/meta/whoami",
+      "status": 401,
+      "json": {
+        "error": {
+          "type": "AUTHENTICATION_REQUIRED",
+          "message": "Invalid credentials"
+        }
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/v0/meta/whoami",
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "status": 401,
+      "json": {
+        "error": {
+          "type": "AUTHENTICATION_REQUIRED",
+          "message": "Invalid credentials"
+        }
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/v0/meta/whoami",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "error": {
+          "type": "TOO_MANY_REQUESTS",
+          "message": "Rate limit exceeded"
+        }
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/v0/meta/whoami",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "error": {
+          "type": "INVALID_REQUEST_UNKNOWN",
+          "message": "Fixture server failure"
+        }
+      }
+    }
+  ]
+}

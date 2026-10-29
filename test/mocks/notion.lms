@@ -1,0 +1,53 @@
+# notion HTTP subset for n8n integration tests. Synthetic credentials only.
+# Config: {"token":"fixture-token","key":"fixture-key"}. X-Lmmock-Fault: 429 or 500.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); }
+ } return value;
+}
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; let key = "fixture-key";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ if (c.has("key")) { key = c.get("key").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"object\": \"error\", \"status\": 401, \"code\": \"unauthorized\", \"message\": \"Invalid credentials\"}"); }
+ else if (x.header("Notion-Version") == "") { ok = false; x.status(400); x.json("{\"object\": \"error\", \"status\": 400, \"code\": \"validation_error\", \"message\": \"Notion-Version is required\"}"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); x.status(429); x.json("{\"object\": \"error\", \"status\": 429, \"code\": \"rate_limited\", \"message\": \"Rate limit exceeded\"}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"object\": \"error\", \"status\": 500, \"code\": \"internal_server_error\", \"message\": \"Fixture server failure\"}"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"object\": \"user\", \"id\": \"bot-fixture\", \"type\": \"bot\"}"); } }
+@list_items
+fn list_items(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (body_field(x,"start_cursor") == "page2") { x.json("{\"object\": \"list\", \"results\": [{\"id\": \"page-2\", \"object\": \"page\"}], \"has_more\": false, \"next_cursor\": null}"); } else { x.json("{\"object\": \"list\", \"results\": [{\"id\": \"page-1\", \"object\": \"page\"}], \"has_more\": true, \"next_cursor\": \"page2\"}"); }
+ }
+}
+@create_item
+fn create_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (!b.has("parent") || !b.has("properties")) { x.status(400); x.json("{\"object\": \"error\", \"status\": 400, \"code\": \"validation_error\", \"message\": \"Missing required fields\"}"); }
+  else {
+   let id = "created-" + str(x.increment("ids"));
+   let item = "{\"object\":\"page\",\"id\":" + json_quote(id) + ",\"parent\":" + b.get("parent").to_json() + ",\"properties\":" + b.get("properties").to_json() + "}";
+   x.set("item:" + id, item); x.status(200); x.json(item);
+  }
+ }
+}
+@get_item
+fn get_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let item = x.get("item:" + x.param("id"));
+  if (item == "") { x.status(404); x.json("{\"object\": \"error\", \"status\": 404, \"code\": \"object_not_found\", \"message\": \"Resource not found\"}"); }
+  else { x.json(item); }
+ }
+}
+route("GET", "/v1/users/me", "identity");
+route("POST", "/v1/search", "list_items");
+route("POST", "/v1/pages", "create_item");
+route("GET", "/v1/pages/{id}", "get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);

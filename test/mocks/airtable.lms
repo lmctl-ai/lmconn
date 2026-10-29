@@ -1,0 +1,52 @@
+# airtable HTTP subset for n8n integration tests. Synthetic credentials only.
+# Config: {"token":"fixture-token","key":"fixture-key"}. X-Lmmock-Fault: 429 or 500.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); }
+ } return value;
+}
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; let key = "fixture-key";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ if (c.has("key")) { key = c.get("key").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"error\": {\"type\": \"AUTHENTICATION_REQUIRED\", \"message\": \"Invalid credentials\"}}"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); x.status(429); x.json("{\"error\": {\"type\": \"TOO_MANY_REQUESTS\", \"message\": \"Rate limit exceeded\"}}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"error\": {\"type\": \"INVALID_REQUEST_UNKNOWN\", \"message\": \"Fixture server failure\"}}"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"id\": \"usrFixture\", \"scopes\": [\"data.records:read\", \"data.records:write\"]}"); } }
+@list_items
+fn list_items(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (x.query("offset") == "page2") { x.json("{\"records\": [{\"id\": \"rec2\", \"fields\": {\"Name\": \"Second\"}}]}"); } else { x.json("{\"records\": [{\"id\": \"rec1\", \"fields\": {\"Name\": \"First\"}}], \"offset\": \"page2\"}"); }
+ }
+}
+@create_item
+fn create_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (!b.has("fields")) { x.status(400); x.json("{\"error\": {\"type\": \"INVALID_REQUEST_UNKNOWN\", \"message\": \"Missing required fields\"}}"); }
+  else {
+   let id = "created-" + str(x.increment("ids"));
+   let item = "{\"id\":" + json_quote(id) + ",\"fields\":" + b.get("fields").to_json() + "}";
+   x.set("item:" + id, item); x.status(200); x.json(item);
+  }
+ }
+}
+@get_item
+fn get_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let item = x.get("item:" + x.param("id"));
+  if (item == "") { x.status(404); x.json("{\"error\": {\"type\": \"NOT_FOUND\", \"message\": \"Resource not found\"}}"); }
+  else { x.json(item); }
+ }
+}
+route("GET", "/v0/meta/whoami", "identity");
+route("GET", "/v0/appFixture/tblFixture", "list_items");
+route("POST", "/v0/appFixture/tblFixture", "create_item");
+route("GET", "/v0/appFixture/tblFixture/{id}", "get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);

@@ -1,0 +1,131 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/api/v4/personal_access_tokens/self",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "json": {
+        "active": true
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/api/v4/projects/1/issues",
+      "method": "GET",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "json": {
+        "0.title": "First"
+      }
+    },
+    {
+      "name": "list second page",
+      "path": "/api/v4/projects/1/issues?page=2",
+      "method": "GET",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "json": {
+        "0.title": "Second"
+      }
+    },
+    {
+      "name": "create",
+      "path": "/api/v4/projects/1/issues",
+      "method": "POST",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "body": {
+        "title": "Created issue"
+      },
+      "status": 201,
+      "json": {
+        "title": "Created issue"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/api/v4/projects/1/issues/${id}",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "json": {
+        "title": "Created issue"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/api/v4/projects/1/issues/missing",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "status": 404,
+      "json": {
+        "message": "Resource not found"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/api/v4/projects/1/issues",
+      "method": "POST",
+      "headers": {
+        "Private-Token": "fixture-token"
+      },
+      "body": {},
+      "status": 400,
+      "json": {
+        "message": "Missing required fields"
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/api/v4/personal_access_tokens/self",
+      "status": 401,
+      "json": {
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/api/v4/personal_access_tokens/self",
+      "headers": {
+        "Private-Token": "wrong"
+      },
+      "status": 401,
+      "json": {
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/api/v4/personal_access_tokens/self",
+      "headers": {
+        "Private-Token": "fixture-token",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "message": "Rate limit exceeded"
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/api/v4/personal_access_tokens/self",
+      "headers": {
+        "Private-Token": "fixture-token",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "message": "Fixture server failure"
+      }
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "steps": [
+    {
+      "name": "credential identity",
+      "path": "/v1/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "json": {
+        "id": "bot-fixture"
+      }
+    },
+    {
+      "name": "list first page",
+      "path": "/v1/search",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "json": {
+        "results.0.id": "page-1",
+        "has_more": true
+      },
+      "body": {},
+      "capture": {
+        "cursor": "next_cursor"
+      }
+    },
+    {
+      "name": "list second page",
+      "path": "/v1/search",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "json": {
+        "results.0.id": "page-2",
+        "has_more": false,
+        "next_cursor": null
+      },
+      "body": {
+        "start_cursor": "${cursor}"
+      }
+    },
+    {
+      "name": "create",
+      "path": "/v1/pages",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "body": {
+        "parent": {
+          "page_id": "parent-fixture"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "text": {
+                  "content": "Created page"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "json": {
+        "object": "page"
+      },
+      "capture": {
+        "id": "id"
+      }
+    },
+    {
+      "name": "read created item",
+      "path": "/v1/pages/${id}",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "json": {
+        "object": "page"
+      }
+    },
+    {
+      "name": "missing item",
+      "path": "/v1/pages/missing",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "status": 404,
+      "json": {
+        "object": "error",
+        "status": 404,
+        "code": "object_not_found",
+        "message": "Resource not found"
+      }
+    },
+    {
+      "name": "invalid create",
+      "path": "/v1/pages",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28"
+      },
+      "body": {},
+      "status": 400,
+      "json": {
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "Missing required fields"
+      }
+    },
+    {
+      "name": "missing credentials",
+      "path": "/v1/users/me",
+      "status": 401,
+      "json": {
+        "object": "error",
+        "status": 401,
+        "code": "unauthorized",
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "wrong credentials",
+      "path": "/v1/users/me",
+      "headers": {
+        "Authorization": "Bearer wrong",
+        "Notion-Version": "2022-06-28"
+      },
+      "status": 401,
+      "json": {
+        "object": "error",
+        "status": 401,
+        "code": "unauthorized",
+        "message": "Invalid credentials"
+      }
+    },
+    {
+      "name": "fault 429",
+      "path": "/v1/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28",
+        "X-Lmmock-Fault": "429"
+      },
+      "status": 429,
+      "json": {
+        "object": "error",
+        "status": 429,
+        "code": "rate_limited",
+        "message": "Rate limit exceeded"
+      }
+    },
+    {
+      "name": "fault 500",
+      "path": "/v1/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Notion-Version": "2022-06-28",
+        "X-Lmmock-Fault": "500"
+      },
+      "status": 500,
+      "json": {
+        "object": "error",
+        "status": 500,
+        "code": "internal_server_error",
+        "message": "Fixture server failure"
+      }
+    },
+    {
+      "name": "missing version",
+      "path": "/v1/users/me",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "status": 400
+    }
+  ]
+}

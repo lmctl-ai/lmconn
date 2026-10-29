@@ -11,8 +11,9 @@ is historically named `lmconnectors`; its executable and public repo are `lmconn
 | github | Added real loopback requests through the existing injected fetch dependency: strict headers, user, anonymous repos, pagination, organization-to-user fallback, 401/403/404/500 and invalid lists |
 | llm | lmmock OpenAI-compatible adapter: requests, response parsing, deadlines, credential redaction, 401/429/503, malformed JSON and disconnects; CLI providers use fake executables |
 
-The added service-mocks tests run the actual lmconn HTTP CLI against all 62
-steps in the Slack, Discord, Telegram, Jira and Stripe contract suites. These
+The added service-mocks tests run the actual lmconn HTTP CLI against all 131
+steps in the Slack, Discord, Telegram, Jira, Stripe, Notion, Airtable, HubSpot,
+GitLab, Asana and Trello contract suites. These
 include vendor-specific auth shapes, stateful operations and error responses.
 A successful HTTP command envelope does not imply a successful vendor operation:
 assertions also check HTTP status and response JSON (e.g. Slack HTTP 200 with

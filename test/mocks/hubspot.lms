@@ -1,0 +1,52 @@
+# hubspot HTTP subset for n8n integration tests. Synthetic credentials only.
+# Config: {"token":"fixture-token","key":"fixture-key"}. X-Lmmock-Fault: 429 or 500.
+p = _lmcode_ schema="schema.json";
+fn body_field(x: Exchange, key: string) -> string {
+ let value = ""; if (str_starts_with(str_trim(x.body()), "{")) {
+  let b = json_parse(x.body()); if (b.has(key)) { value = b.get(key).as_string(); }
+ } return value;
+}
+fn allowed(x: Exchange) -> bool {
+ let c = json_parse(config()); let token = "fixture-token"; let key = "fixture-key";
+ if (c.has("token")) { token = c.get("token").as_string(); }
+ if (c.has("key")) { key = c.get("key").as_string(); }
+ let ok = secure_equal(x.header("Authorization"), "Bearer " + token);
+ if (!ok) { x.status(401); x.json("{\"status\": \"error\", \"message\": \"Invalid credentials\", \"category\": \"INVALID_AUTHENTICATION\", \"correlationId\": \"fixture-error\"}"); }
+ else if (x.header("X-Lmmock-Fault") == "429") { ok = false; x.set_header("Retry-After","1"); x.status(429); x.json("{\"status\": \"error\", \"message\": \"Rate limit exceeded\", \"category\": \"RATE_LIMITS\", \"correlationId\": \"fixture-error\"}"); }
+ else if (x.header("X-Lmmock-Fault") == "500") { ok = false; x.status(500); x.json("{\"status\": \"error\", \"message\": \"Fixture server failure\", \"category\": \"VALIDATION_ERROR\", \"correlationId\": \"fixture-error\"}"); }
+ return ok;
+}
+@identity
+fn identity(x: Exchange) -> void implements Handler { if (allowed(x)) { x.json("{\"portalId\": 12345, \"accountType\": \"STANDARD\"}"); } }
+@list_items
+fn list_items(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  if (body_field(x,"after") == "page2") { x.json("{\"total\": 2, \"results\": [{\"id\": \"2\", \"properties\": {\"firstname\": \"Second\"}}]}"); } else { x.json("{\"total\": 2, \"results\": [{\"id\": \"1\", \"properties\": {\"firstname\": \"First\"}}], \"paging\": {\"next\": {\"after\": \"page2\"}}}"); }
+ }
+}
+@create_item
+fn create_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let b = json_parse(x.body());
+  if (!b.has("properties")) { x.status(400); x.json("{\"status\": \"error\", \"message\": \"Missing required fields\", \"category\": \"VALIDATION_ERROR\", \"correlationId\": \"fixture-error\"}"); }
+  else {
+   let id = "created-" + str(x.increment("ids"));
+   let item = "{\"id\":" + json_quote(id) + ",\"properties\":" + b.get("properties").to_json() + ",\"archived\":false}";
+   x.set("item:" + id, item); x.status(201); x.json(item);
+  }
+ }
+}
+@get_item
+fn get_item(x: Exchange) -> void implements Handler {
+ if (allowed(x)) {
+  let item = x.get("item:" + x.param("id"));
+  if (item == "") { x.status(404); x.json("{\"status\": \"error\", \"message\": \"Resource not found\", \"category\": \"VALIDATION_ERROR\", \"correlationId\": \"fixture-error\"}"); }
+  else { x.json(item); }
+ }
+}
+route("GET", "/account-info/v3/details", "identity");
+route("POST", "/crm/v3/objects/contacts/search", "list_items");
+route("POST", "/crm/v3/objects/contacts", "create_item");
+route("GET", "/crm/v3/objects/contacts/{id}", "get_item");
+end _lmcode_
+savedsl(p, ARGV[0]);
