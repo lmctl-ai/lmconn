@@ -206,44 +206,56 @@ That is what makes the flow runnable without a browser.
    verification, state mismatch, body-style client auth, form-encoded token
    responses, retained refresh tokens, `invalid_grant` to `RECONNECT`,
    `--manual`, `--no-pkce`, timeouts and secret-free error messages.
-2. **Adversarial oracle**: `test/oauth-adversarial.test.js` uses the
-   `misbehave` modes to check that lmconn fails safely when the provider is
-   wrong: `bad-state` (the redirect carries a tampered `state`, the client
-   must refuse to exchange the code), `bad-json` (a truncated token body
-   must be a clean error, not a crash) and `string-expires` (`expires_in`
-   as a string, which real providers do send, must still produce a valid
-   `oauth_expires_at`). Rotation and plain-PKCE options cover the remaining
-   provider variations.
+2. **Adversarial oracle**: `test/oauth-adversarial.test.js` checks that
+   lmconn fails safely, or degrades correctly, when the provider deviates:
+   `expires_in` as a numeric string (real providers send this) still gives
+   a finite future expiry; an omitted `expires_in` clears stale expiry and
+   `status` reports `null`; unknown token-response fields are tolerated and
+   never leak into metadata; HTTP 500 from the token endpoint becomes a
+   sanitized `OAUTH_ERROR`; an empty scope is preserved. The mock's
+   `misbehave` modes (`bad-state`: tampered `state` on the redirect,
+   `bad-json`: truncated token body, `string-expires`) and its
+   `rotateRefreshTokens`, `formEncodedTokenResponse`, `requirePkce` and
+   `allowPlainPkce` options are the knobs this suite grows on.
 3. **Cross-validation target for n8n**: `scripts/verify-n8n-oauth.mjs`
-   drives n8n's own OAuth2 client (the installed `n8n` package) against the
-   same mock, with the mock's demo client registered for n8n's callback
-   `http://localhost:5678/rest/oauth2-credential/callback`. If n8n's client
-   completes the flow and lmconn's client completes the flow against the
-   same server, the two implementations agree with the mock independently,
-   which is the evidence a self-written fake cannot give. This is a manual
-   script, not part of `npm test`: it needs the n8n package on the machine
-   and takes seconds to minutes. Check the header comment of the script for
-   its current status; at the time of writing it was being built in
-   parallel with this page and had not yet landed on master.
+   drives a headless n8n (2.45.4, `n8n` on PATH) against the same mock
+   through n8n's REST API: owner setup, create an `oAuth2Api` credential,
+   fetch n8n's authorization URL, GET `/authorize` without following
+   redirects, then GET n8n's callback with the session cookie. Success
+   requires n8n's success page and exactly one authorize and one token
+   request with header client auth and HTTP 200 from the strict token
+   endpoint. If n8n's client completes the flow and lmconn's client
+   completes the flow against the same server, the two implementations
+   agree with the mock independently, which is the evidence a self-written
+   fake cannot give. It is a manual script, not part of `npm test`: n8n is
+   a separately installed prerequisite, it needs free loopback ports 5556,
+   5678 and 5679, uses a fresh `N8N_USER_FOLDER`, and never prints cookies,
+   URLs, codes or tokens. The mock runs as a child process so only redacted
+   observations cross the IPC boundary.
 
 ### Zero-credential demo
 
 `examples/oauth-mock-demo.lms` runs the whole thing from lmscript with no
-real credentials: start the mock standalone, authorize, inspect status,
-call `/api/userinfo` through `http request --auth`, refresh, and shut the
-mock down.
+real credentials: it starts the mock on port 5557 in parallel with the
+client flow, authorizes with `--auto-follow`, inspects `status`, calls
+`/api/userinfo` through `http request --auth`, and exits 0. Run it from the
+repo root with ports 5557 and 5558 free.
+
+`--auto-follow` makes `oauth authorize` fetch the authorization URL itself,
+following redirects, so the mock's immediate 302 lands on lmconn's own
+loopback callback with no browser involved. It is mutually exclusive with
+`--manual` and exists for demos and mock tests only: `state` and PKCE are
+still generated and verified, and a real provider would answer the fetch
+with a login page, never the callback, so the command reports
+`OAUTH_ERROR` instead of a token.
 
 ```sh
 node scripts/mock-idp.js --port 5556 --once   # demo-client / demo-secret, exits 3 s after the first grant
 lmconn oauth authorize mockdemo --client-id demo-client --client-secret demo-secret \
   --auth-url http://127.0.0.1:5556/authorize --token-url http://127.0.0.1:5556/token \
-  --scope demo --port 5558
+  --scope demo --port 5558 --auto-follow
 lmconn http request http://127.0.0.1:5556/api/userinfo --auth mockdemo
 ```
-
-Because the mock redirects without a consent page, the authorize URL
-printed to stderr can be followed by any HTTP client instead of a browser;
-the demo does exactly that so it runs unattended.
 
 ### What stays manual
 

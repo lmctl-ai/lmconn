@@ -51,28 +51,35 @@ in the test title, is easier to read and extend than a family of fakes.
 refresh tokens and secrets redacted, so a test can assert "no `/token`
 call happened" without the log ever holding a secret.
 
-## Auto-follow: why the demo needs no browser
+## `--auto-follow`: why the demo needs no browser
 
 The mock has no consent page. `/authorize` validates the request and
 answers 302 immediately. That makes the authorization-code flow runnable
-end to end by a program: fetch the authorize URL that `lmconn oauth
-authorize` prints to stderr, do not follow the redirect blindly, read its
-`Location`, and GET that URL, which is lmconn's own loopback callback. The
-runnable demo `examples/oauth-mock-demo.lms` does this, and the standalone
-`node scripts/mock-idp.js --once` exits a few seconds after the first grant
-so the demo cleans up after itself.
+end to end by a program, and `lmconn oauth authorize --auto-follow` is the
+one-line way to do it: after the loopback listener is up, the command
+fetches its own authorization URL with redirects followed, so the mock's
+302 lands on lmconn's `/callback`; if the fetch completes without the
+callback being reached (a real provider's login page), it fails with
+`OAUTH_ERROR` rather than waiting. `--auto-follow` and `--manual` are
+mutually exclusive.
 
-This is a property of the mock, not a shortcut in the client: lmconn's
-`authorize` still generates `state` and the PKCE verifier, still checks
-`state` on the callback, and still exchanges the code at the token endpoint
-with the registered client-authentication style. The only thing automated
-is the human click. Against a real provider the same command prints the
-same URL and waits for a browser.
+The flag was chosen over an external "follow the redirect" step in the demo
+because the demo is lmscript calling lmconn as a process: a second HTTP
+client in lmscript would duplicate the redirect-following logic, and the
+authorize URL would have to leave lmconn through stderr and be parsed. One
+flag keeps the demo (`examples/oauth-mock-demo.lms`) to three lmconn calls
+and keeps every secret inside lmconn.
 
-## Status at writing
+This is a property of the mock, not a shortcut in the client: `authorize`
+still generates `state` and the PKCE verifier, still checks `state` on the
+callback, and still exchanges the code at the token endpoint with the
+registered client-authentication style. The only thing automated is the
+human click. Against a real provider the same command without the flag
+prints the same URL and waits for a browser.
 
-`scripts/mock-idp.js` and `test/oauth.test.js` are on master.
-`test/oauth-adversarial.test.js`, `scripts/verify-n8n-oauth.mjs` and
-`examples/oauth-mock-demo.lms` were being written in parallel against the
-pinned interface above; this page describes their intent, and the files
-themselves are authoritative once landed.
+## Status
+
+All four pieces are on master as of 2026-10-29: `scripts/mock-idp.js`,
+`test/oauth.test.js`, `test/oauth-adversarial.test.js`,
+`scripts/verify-n8n-oauth.mjs` (manual, needs n8n on PATH) and
+`examples/oauth-mock-demo.lms`. The suite is 66 tests.
