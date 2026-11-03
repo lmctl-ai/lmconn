@@ -332,6 +332,12 @@
           "description": "Disable PKCE for legacy providers"
         },
         {
+          "name": "autoFollow",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Follow authorization redirects automatically for demos and mock IdPs"
+        },
+        {
           "name": "manual",
           "type": "boolean",
           "occurs": "?",
@@ -362,6 +368,238 @@
           "type": "string",
           "positional": true,
           "description": "Credential service name"
+        }
+      ]
+    },
+    {
+      "name": "valkey_ping",
+      "access": "read",
+      "description": "Ping Valkey server via native RESP or REST",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "Valkey host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "Valkey port (default 6379 for resp, 8080 for rest)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "resp",
+          "enum": [
+            "resp",
+            "rest"
+          ],
+          "description": "Protocol mode: resp or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "valkey_get",
+      "access": "read",
+      "description": "Get a key from Valkey",
+      "params": [
+        {
+          "name": "key",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Key name"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "Valkey host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "Valkey port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "resp",
+          "enum": [
+            "resp",
+            "rest"
+          ],
+          "description": "Protocol mode: resp or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "valkey_set",
+      "access": "write",
+      "description": "Set a key in Valkey",
+      "params": [
+        {
+          "name": "key",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Key name"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Value to store"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "Valkey host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "Valkey port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "resp",
+          "enum": [
+            "resp",
+            "rest"
+          ],
+          "description": "Protocol mode: resp or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "valkey_del",
+      "access": "write",
+      "description": "Delete a key in Valkey",
+      "params": [
+        {
+          "name": "key",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Key name"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "Valkey host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "Valkey port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "resp",
+          "enum": [
+            "resp",
+            "rest"
+          ],
+          "description": "Protocol mode: resp or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "valkey_cmd",
+      "access": "write",
+      "description": "Execute arbitrary command against Valkey",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Command name"
+        },
+        {
+          "name": "args",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Command arguments"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "Valkey host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "Valkey port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "resp",
+          "enum": [
+            "resp",
+            "rest"
+          ],
+          "description": "Protocol mode: resp or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
         }
       ]
     }
