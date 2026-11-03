@@ -160,7 +160,7 @@ export async function sendRest(host, port, cmdArgs, timeoutMs = 5000) {
   let url;
   let init = { signal: AbortSignal.timeout(timeoutMs) };
 
-  if (c === 'ping') {
+  if (c === 'ping' && args.length === 0) {
     url = `http://${host}:${port}/ping`;
   } else if (c === 'get' && args.length === 1) {
     url = `http://${host}:${port}/get/${encodeURIComponent(args[0])}`;
