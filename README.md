@@ -286,3 +286,7 @@ These are selected contracts, not complete n8n-node or live-provider coverage;
 Datadog uses n8n's generic HTTP-request credential and Linear uses canned query
 matching. Source provenance and limitations are recorded in
 [lmmock's preset documentation](https://github.com/lmctl-ai/lmmock/blob/main/docs/http-presets.md).
+
+## lmauth broker imports
+
+Use `lmconn cred store SERVICE --stdin` with `LMCONN_STORE_MODE=broker` for issuer/origin-bound, nonexportable Bearer or OAuth2 grants. Secrets travel over private stdin; only a handle/receipt returns. Protected authenticated HTTP returns receipt metadata, not response bodies. Legacy reveal remains available only for legacy entries outside broker mode. Windows protected stores fail closed pending native ACL support. See [the broker store contract and wp318 migration](docs/broker-store.md).

@@ -314,3 +314,11 @@ a documented procedure, not an automated claim. The mock covers the
 protocol; the presets in `src/oauth-presets.json` carry the per-provider
 endpoints and quirks; the remaining risk is a provider deviating from both,
 which only a manual run against that provider reveals.
+
+## Broker security contract
+
+For lmauth, use the [bound no-reveal store](broker-store.md), not the legacy import/reveal interface. Broker imports clear prior configuration, bind issuer/client/origins and refuse identity changes. Device flow uses the provider's monotonic lifetime across waits, fetch, body parsing and pre-commit validation; long waits are chunked for the Node timer ABI. Scopes cannot echo known token bytes or exceed requested scopes, metadata is scrubbed for old stores, and terminal control/bidi instructions are rejected. OAuth endpoints require TLS except literal-loopback fixtures.
+
+Invalid callback grammar/state returns a generic 400 without consuming the valid attempt. A valid code/error claims the session once; subsequent callbacks get 409. The parser rejects malformed percent/UTF-8 escapes, fragments, duplicate/unknown parameters and code/error ambiguity, decodes once, and has no application-added size/work cap. Manual input can continue after invalid lines; EOF without valid input fails. Existing explicit authorization timeout behavior remains, so a flow receiving only invalid callbacks eventually reaches that deadline.
+
+Run `node scripts/mutate-oauth-security.mjs` for production-copy negative controls and `node scripts/oauth-security-smoke.mjs ABSOLUTE_BINARY` for native synthetic-device, body-expiry and broker checks. These are offline loopback fixtures.

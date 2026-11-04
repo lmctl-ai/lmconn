@@ -20,7 +20,9 @@ test('PAT broker path is nonexportable and broker mode refuses legacy stores/rev
 });
 test('Windows broker path fails closed before creating a store',{skip:process.platform!=='win32'},()=>{const db=join(dir,'windows','db');const r=invoke(['cred','store','win','--stdin'],bound(),{LMCONN_DB:db,LMCONN_STORE_MODE:'broker'});assert.equal(r.code,1);assert.equal(r.json.error.code,'STORE_SECURITY');assert.equal(fs.existsSync(db),false);});
 test('legacy auth pins first origin and cross-origin redirect strips auth even with an injected transport',async()=>{
- setCred('first-use','api_key',access);let n=0;const r=await request(parseArgs(['request','https://one.invalid','--auth','first-use']),async(u,o)=>{assert.equal(o.redirect,'manual');n++;if(n===1){assert.equal(o.headers.get('authorization'),'Bearer '+access);return new Response(null,{status:302,headers:{location:'https://two.invalid/end'}});}assert.equal(o.headers.has('authorization'),false);return Response.json({ok:true});});assert.equal(r.status,200);assert.equal(n,2);
+ setCred('first-use','api_key',access);const seen=[];
+ const r=await request(parseArgs(['request','https://one.invalid','--auth','first-use']),async(u,o)=>{seen.push({url:u,mode:o.redirect,auth:o.headers.get('authorization')});if(seen.length===1)return new Response(null,{status:302,headers:{location:'https://two.invalid/end'}});return Response.json({ok:true});});
+ assert.equal(r.status,200);assert.equal(seen.length,2);assert.ok(seen.every(x=>x.mode==='manual'));assert.equal(seen[0].auth,'Bearer '+access);assert.equal(seen[1].auth,null);
  await assert.rejects(request(parseArgs(['request','https://two.invalid','--auth','first-use']),async()=>{throw Error('must not call')}),/origin|binding|policy/i);
 });
 test('store repairs owned loose directory modes and rejects DB and sidecar symlinks',{skip:process.platform==='win32'},()=>{
@@ -53,4 +55,10 @@ test('protected refresh configuration is explicit, mismatch-refused, and nonexpo
 test('secure deletion clears live SQLite freelist fragments and sidecars remain private',{skip:process.platform==='win32'},()=>{
  const file=join(dir,'delete.db'),db=openDb(file),marker='DELETION_CANARY_';setCred('remove','oauth_access_token',marker.repeat(2000),db);db.prepare('DELETE FROM creds WHERE service=?').run('remove');closeDb(file);assert.ok(!fs.readFileSync(file).includes(Buffer.from(marker)));
  const db2=openDb(file);db2.exec('PRAGMA journal_mode=WAL');setCred('wal','oauth_access_token',access,db2);for(const suffix of ['-wal','-shm'])assert.equal(fs.statSync(file+suffix).mode&0o777,0o600);closeDb(file);
+});
+
+test('legacy HTTP redacts known encoded echoes while protected HTTP never exposes response strings',async()=>{
+ setCred('legacy-echo','api_key',access);const encoded=Buffer.from(access).toString('base64'),percent=encodeURIComponent(access);
+ const r=await request(parseArgs(['request','https://echo.invalid','--auth','legacy-echo']),async()=>Response.json({raw:access,encoded,percent}));
+ assert.ok(!JSON.stringify(r).includes(access)&&!JSON.stringify(r).includes(encoded)&&!JSON.stringify(r).includes(percent));
 });

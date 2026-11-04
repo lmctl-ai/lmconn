@@ -111,6 +111,26 @@
       "params": []
     },
     {
+      "name": "cred_store",
+      "access": "write",
+      "description": "Store an issuer/origin-bound nonexportable Bearer or OAuth2 grant from JSON stdin",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Broker-owned credential handle"
+        },
+        {
+          "name": "stdin",
+          "type": "boolean",
+          "occurs": "1",
+          "description": "Read the grant and binding from stdin"
+        }
+      ]
+    },
+    {
       "name": "cred_oauth_store",
       "access": "write",
       "description": "Atomically store an OAuth2 token from JSON stdin and return its service handle",

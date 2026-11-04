@@ -33,10 +33,10 @@ check('--version', r.status === 0 && r.envelope?.ok && r.envelope.result.version
 
 r = run(['--cli-schema', '--json']);
 const ops = r.envelope?.operations ?? (() => { try { return JSON.parse(r.stdout).operations; } catch { return null; } })();
-check('--cli-schema lists 22 operations', r.status === 0 && Array.isArray(ops) && ops.length === 22,
+check('--cli-schema lists 23 operations', r.status === 0 && Array.isArray(ops) && ops.length === 23,
   `got ${ops?.length}`);
 const opNames = new Set((ops ?? []).map((o) => o.name));
-check('--cli-schema lists OAuth and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store'].every((n) => opNames.has(n)),
+check('--cli-schema lists OAuth and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store'].every((n) => opNames.has(n)),
   `names=${[...opNames].filter((n) => n.startsWith('oauth_')).join(',') || 'none'}`);
 
 r = run(['cred', 'set', 'smoke', 'api_key', '--stdin'], 'smoke-token-123');
@@ -58,6 +58,20 @@ r = run(['cred', 'oauth-store', 'smoke-owner/github', '--stdin'], JSON.stringify
 check('cred oauth-store returns a handle without the secret', r.status === 0 && r.envelope?.result?.handle === 'smoke-owner/github' && !r.stdout.includes('synthetic-smoke-access'));
 r = run(['oauth', 'list']);
 check('oauth list returns metadata without secret values', r.status === 0 && r.envelope?.result?.some((c) => c.handle === 'smoke-owner/github' && c.service === 'smoke-owner/github' && c.owner === 'smoke-owner') && !r.stdout.includes('synthetic-smoke-access'));
+
+r = run(['cred', 'store', 'broker-smoke', '--stdin'], JSON.stringify({
+  kind: 'bearer', accessToken: 'synthetic-broker-secret', scopes: ['read'], owner: 'smoke', source: 'lmauth',
+  issuer: 'https://issuer.invalid', allowedOrigins: ['https://api.invalid'],
+}));
+if (process.platform === 'win32') {
+  check('broker store fails closed pending native Windows ACLs', r.status === 1 && r.envelope?.error?.code === 'STORE_SECURITY');
+} else {
+  check('broker store returns a bound nonexportable handle', r.status === 0 && r.envelope?.result?.handle === 'broker-smoke' && !r.stdout.includes('synthetic-broker-secret'));
+  r = run(['cred', 'get', 'broker-smoke', 'api_key', '--reveal']);
+  check('broker secret cannot be revealed', r.status === 1 && r.envelope?.error?.code === 'CREDENTIAL_POLICY' && !r.stdout.includes('synthetic-broker-secret'));
+  r = run(['cred_get', '--input-json', JSON.stringify({ service: 'broker-smoke', field: 'api_key', reveal: true })]);
+  check('schema reveal route cannot bypass broker policy', r.status === 1 && r.envelope?.error?.code === 'CREDENTIAL_POLICY');
+}
 
 r = run(['llm', 'providers']);
 check('llm providers lists 7', r.status === 0 && Array.isArray(r.envelope?.result) && r.envelope.result.length === 7,

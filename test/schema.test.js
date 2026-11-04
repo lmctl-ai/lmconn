@@ -43,7 +43,7 @@ test('the real document validates structurally and contains this wave\'s operati
   const doc = await schemaDocument();
   assertStructure(doc);
   const names = doc.operations.map((o) => o.name);
-  for (const n of ['http_request', 'github_user', 'github_repos', 'oauth_device', 'oauth_list', 'cred_oauth_store']) assert.ok(names.includes(n), n);
+  for (const n of ['http_request', 'github_user', 'github_repos', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store']) assert.ok(names.includes(n), n);
   assert.ok(doc.globals === GLOBALS);
 });
 
@@ -92,6 +92,7 @@ test('argvFromSchemaCall maps params to CLI argv', async () => {
     ['http', 'request', 'http://h/p', '--method', 'POST', '--header', 'A: 1', '--header', 'B: 2', '--data', '{"x":1}', '--timeout', '5']);
   assert.deepEqual(await argvFromSchemaCall(['github_repos', '--input-json', '{"org":"lmctl-ai","limit":5}']), ['github', 'repos', 'lmctl-ai', '--limit', '5']);
   assert.deepEqual(await argvFromSchemaCall(['cred_oauth_store', '--input-json', '{"service":"owner/provider","stdin":true}']), ['cred', 'oauth-store', 'owner/provider', '--stdin']);
+  assert.deepEqual(await argvFromSchemaCall(['cred_store', '--input-json', '{"service":"lmauth:handle","stdin":true}']), ['cred', 'store', 'lmauth:handle', '--stdin']);
   assert.deepEqual(await argvFromSchemaCall(['oauth_device', '--input-json', '{"service":"demo","clientId":"id","deviceUrl":"http://127.0.0.1/device","tokenUrl":"http://127.0.0.1/token"}']),
     ['oauth', 'device', 'demo', '--client-id', 'id', '--device-url', 'http://127.0.0.1/device', '--token-url', 'http://127.0.0.1/token']);
   assert.deepEqual(await argvFromSchemaCall(['github_user', '--input-json', '{}', '--readonly']), ['github', 'user']);
