@@ -27,7 +27,7 @@ test('device rejects token echoes in scope before storing and scrubs old metadat
 });
 test('device rejects non-loopback HTTP before sending, and rejects terminal controls in human instructions',async t=>{
  let requests=0;t.mock.method(globalThis,'fetch',async()=>{requests++;return Response.json(grant)});let r=await capture(()=>run(args('plain').map(x=>x.replace('127.0.0.1','not-loopback.invalid'))));assert.notEqual(r.code,0);assert.equal(r.json.error?.code,'USAGE');assert.equal(requests,0);
- for(const bad of ['HUMAN\x1b]52;c;AAAA\x07','HUMAN\u202eBAD']){const x=await device(t,'controls',()=>Response.json({error:'access_denied'}),{...grant,user_code:bad});assert.equal(x.calls,1);assert.ok(!x.r.err.includes('\x1b')&&!x.r.err.includes('\u202e'));}
+ for(const bad of ['HUMAN\x1b]52;c;AAAA\x07','HUMAN\u202eBAD','HUMAN\u2028BAD','HUMAN\u061cBAD']){const x=await device(t,'controls',()=>Response.json({error:'access_denied'}),{...grant,user_code:bad});assert.equal(x.calls,1);assert.ok(!x.r.err.includes('\x1b')&&!x.r.err.includes('\u202e'));}
 });
 test('device provider expiry bounds waits and refuses late fetch/body results',async t=>{
  let x=await device(t,'wait-expired',()=>{throw Error('no token call allowed')},{...grant,expires_in:2,interval:60});assert.deepEqual(x.waits,[2000]);assert.equal(x.r.json.error?.code,'EXPIRED');

@@ -5,8 +5,8 @@ export function securityError(message = 'Credential policy refused this operatio
 export function unsafeText(value) {
   for (const c of String(value)) {
     const n = c.codePointAt(0);
-    if (n < 32 || (n >= 127 && n <= 159) || n === 0x200e || n === 0x200f ||
-        (n >= 0x202a && n <= 0x202e) || (n >= 0x2066 && n <= 0x2069)) return true;
+    if (n < 32 || (n >= 127 && n <= 159) || n === 0x00ad || n === 0x061c || n === 0xfeff ||
+        (n >= 0x200b && n <= 0x200f) || (n >= 0x2028 && n <= 0x202e) || (n >= 0x2060 && n <= 0x206f)) return true;
   }
   return false;
 }
