@@ -16,7 +16,10 @@ export async function startMock(name, config = {}, port = 0) {
     renameSync(settings + '.tmp', settings);
   };
   configure({});
-  const server = spawn(process.env.LMMOCK_BIN || 'lmmock', ['exec', '--script', fileURLToPath(new URL(`../test/mocks/${name}.lms`, import.meta.url)), '--config', settings, '--listen', `127.0.0.1:${port}`, '--ready-file', ready, '--', process.execPath, fileURLToPath(new URL('./lmmock-keepalive.mjs', import.meta.url))], {stdio:['pipe','ignore','pipe']});
+  const fixtureDir = process.env.LMMOCK_FIXTURE_DIR;
+  const fixtureFlag = fixtureDir ? '--lmcode' : '--script';
+  const fixturePath = fixtureDir ? join(fixtureDir, `${name}.lmcode`) : fileURLToPath(new URL(`../test/mocks/${name}.lms`, import.meta.url));
+  const server = spawn(process.env.LMMOCK_BIN || 'lmmock', ['exec', fixtureFlag, fixturePath, '--config', settings, '--listen', `127.0.0.1:${port}`, '--ready-file', ready, '--', process.execPath, fileURLToPath(new URL('./lmmock-keepalive.mjs', import.meta.url))], {stdio:['pipe','ignore','pipe']});
   let failure;
   server.on('error', error => {failure = error;});
   // Compiler/host diagnostics are held locally; never print fixture credentials.

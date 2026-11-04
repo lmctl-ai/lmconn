@@ -23,7 +23,8 @@ hash. A random `state` binds the redirect to the initiating request and
 protects against CSRF.
 
 lmconn implements authorization-code exchange with PKCE by default and the
-refresh-token grant. This does not implement every n8n grant: automatic
+refresh-token grant, plus RFC 8628 device authorization for public clients.
+This does not implement every n8n grant: automatic
 client registration, client-credentials grants, and OAuth 1.0a are outside
 this flow. Refresh runs in the calling CLI process; there is no single-flight
 lease across concurrent processes.
@@ -50,8 +51,11 @@ arguments. The configuration fields are:
 | `--client-id` | `oauth_client_id` | preset, else stored value |
 | `--client-secret` | `oauth_client_secret` | stored value |
 | `--auth-url` | `oauth_auth_url` | preset, else stored value |
+| `--device-url` | `oauth_device_url` | stored value; required for device authorization |
 | `--token-url` | `oauth_token_url` | preset, else stored value |
 | `--scope` | `oauth_scope` | preset, else stored value |
+| `--owner` | `oauth_owner` | optional account/resource owner label |
+| `--source` | `oauth_source` | optional provenance label |
 | `--auth-query` | `oauth_auth_query` | preset, else stored value |
 | `--auth-style` | `oauth_auth_style` | preset, else `header` |
 
@@ -88,6 +92,26 @@ authorization stores `oauth_access_token`, `oauth_refresh_token` if returned,
 `oauth_token_type`. The database defaults to `~/.lmconn/creds.db`;
 `LMCONN_DB` overrides it. `cred list` shows names and timestamps, not values.
 
+For lmauth or another broker that has already verified an OAuth2 response,
+`lmconn cred oauth-store SERVICE --stdin` accepts JSON with `kind`,
+`accessToken`, optional `refreshToken`, `scopes` (string or array), optional
+`expiresAt`, `owner`, and `source`. It validates the whole record and writes
+the OAuth fields in one SQLite transaction. The service string is the opaque
+consumer handle; the returned envelope contains only `{provider, handle,
+kind, stored}`. Existing databases need no migration because metadata uses
+the existing `oauth_*` key/value rows.
+
+`lmconn oauth list` gives the corresponding provider, handle, kind, owner,
+source, scopes, expiry, and refresh-token presence without returning secrets.
+`lmconn http request URL --auth SERVICE` is the existing read-by-handle path:
+the token remains inside lmconn while it adds the Bearer header to that one
+request. `cred get --reveal` remains a legacy explicit escape hatch and is not
+part of the broker interface. `oauth refresh SERVICE` is the refresh hook and
+keeps the same service handle when the provider rotates the refresh token.
+Revocation is provider-specific and is not implemented by this generic client;
+lmauth should expose an optional revoke hook only for recipes with a verified
+revocation endpoint, then clear the service's token rows after success.
+
 ```sh
 lmconn oauth status SERVICE
 lmconn oauth refresh SERVICE
@@ -103,6 +127,21 @@ Refresh posts `grant_type=refresh_token` using the stored client auth style,
 updates the access token and expiry, and retains the old refresh token when
 the response omits a new one. An `invalid_grant` response maps to error code
 `RECONNECT`: run `oauth authorize` again.
+
+## Device-code flow
+
+```sh
+lmconn oauth device SERVICE --client-id CLIENT_ID --device-url DEVICE_URL \
+  --token-url TOKEN_URL --scope 'read:user repo' --owner ACCOUNT --source lmauth
+```
+
+The command requests a device code, prints the verification URL and user code
+to stderr, then polls at the provider's interval. `authorization_pending`
+continues polling and `slow_down` increases the interval by five seconds.
+Provider `expires_in` is the only flow deadline. Client secrets are not sent
+for this public-client grant. On success the same nonsecret metadata envelope
+and `oauth_*` store fields are used as the loopback flow. The command never
+prints the device code, access token, or refresh token.
 
 For `lmconn http request URL --auth SERVICE`, resolution is:
 
@@ -242,6 +281,14 @@ real credentials: it starts the mock on port 5557 in parallel with the
 client flow, authorizes with `--auto-follow`, inspects `status`, calls
 `/api/userinfo` through `http request --auth`, and exits 0. Run it from the
 repo root with ports 5557 and 5558 free.
+
+Three Node runnable examples exercise device authorization, loopback PKCE,
+and refresh-token rotation with synthetic local providers:
+`node examples/oauth-device.mjs`, `node examples/oauth-pkce.mjs`, and
+`node examples/oauth-refresh-rotation.mjs`. The latter two use the synced
+lmmock OAuth fixture. The device example currently uses the tiny RFC 8628
+stub in `scripts/mock-device-idp.js`; lmmock at the pinned source revision
+does not yet provide this generic protocol.
 
 `--auto-follow` makes `oauth authorize` fetch the authorization URL itself,
 following redirects, so the mock's immediate 302 lands on lmconn's own

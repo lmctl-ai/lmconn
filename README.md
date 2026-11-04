@@ -55,6 +55,7 @@ lmconn --cli-schema --json                                # cli.schema.v1 docume
 | Command | Does |
 |---|---|
 | `cred set <service> <field> (--value V \| --env VAR \| --stdin)` | store one credential; prefer `--env` or `--stdin` so the secret stays out of argv |
+| `cred oauth-store <service> --stdin` | atomically import OAuth2 token metadata and secret from JSON stdin; returns the service handle only |
 | `cred get <service> <field> [--reveal]` | presence check; `--reveal` returns the value |
 | `cred list` | services, fields and timestamps, never values |
 | `cred delete <service> <field>` | remove one credential |
@@ -68,8 +69,10 @@ LLM providers read `<provider> api_key`; `http --auth SERVICE` reads
 | Command | Does |
 |---|---|
 | `oauth authorize <service>` | authorization code + PKCE + state via a loopback callback; `--manual` accepts the redirect URL on stdin |
+| `oauth device <service>` | OAuth2 device-code login; prints verification instructions, stores the token, returns metadata only |
 | `oauth refresh <service>` | refresh stored tokens; `RECONNECT` means authorize again |
 | `oauth status <service>` | read-only authorization, expiry, and refresh-token presence; never token values |
+| `oauth list` | list provider, service handle, owner, source, scopes, expiry and refresh-token presence; never token values |
 
 Create a GitHub OAuth App with callback `http://127.0.0.1:15847/callback`,
 and set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in your environment.
@@ -92,6 +95,12 @@ stored and reused on refresh. Resolution order: flag > cred store > preset.
 and a refresh token exists. Configuration and tokens live in `oauth_*`
 fields in the credential store. See [OAuth2 in lmconn](docs/oauth2.md) for
 all options, headless setup, storage details, and testing scope.
+
+For a broker that already verified a token, pipe one JSON record to
+`lmconn cred oauth-store SERVICE --stdin`; stdout returns `{provider, handle,
+kind, stored}` only. The service name is the handle. A consumer can use it
+through `lmconn http request URL --auth SERVICE`, which sends the token only
+to the requested HTTP endpoint. `oauth list` returns nonsecret metadata.
 
 ### llm
 
@@ -148,8 +157,9 @@ r = lmconn.github_repos("lmctl-ai", {limit: 5});   # {status:"ok", result:<lmcon
 ```
 
 - Operation names are `<area>_<sub>`: `cred_set`, `cred_get`, `cred_list`,
-  `cred_delete`, `cred_path`, `llm_providers`, `llm_chat`, `llm_probe`,
-  `http_request`, `github_user`, `github_repos`.
+  `cred_delete`, `cred_path`, `cred_oauth_store`, `llm_providers`, `llm_chat`,
+  `llm_probe`, `http_request`, `github_user`, `github_repos`, `oauth_authorize`,
+  `oauth_refresh`, `oauth_status`, `oauth_list`, `oauth_device`.
 - Params marked `positional` lead (`url`, `org`); the rest go in one options
   map with camelCase keys (`dataFile`, `maxTokens`, `promptFile`).
 - lmscript spawns `lmconn <op> --input-json '{"op","params"}'`; `src/schema.js`
@@ -208,11 +218,13 @@ map against n8n's connector categories is in
 
 ## Testing
 
-`npm test` runs the full OAuth2 flow against `scripts/mock-idp.js`, a
-strict mock authorization server (RFC 6749 plus PKCE): exact redirect URI,
+`npm test` runs the full OAuth2 flow against local mock identity providers:
+`scripts/mock-idp.js` is backed by lmmock and validates RFC 6749 plus PKCE (exact redirect URI,
 one-time codes, S256 verification, header and body client authentication,
 RFC error codes, optional refresh-token rotation, and adversarial modes for
-a misbehaving provider. No network and no credentials are involved.
+a misbehaving provider); the device-code test uses a small RFC 8628 loopback stub until lmmock ships its generic device endpoint. No external network or real credentials are involved. Runnable examples:
+`node examples/oauth-device.mjs`, `node examples/oauth-pkce.mjs`, and
+`node examples/oauth-refresh-rotation.mjs`.
 `scripts/verify-n8n-oauth.mjs` runs n8n's own OAuth2 client against the
 same mock for manual cross-validation, and `examples/oauth-mock-demo.lms`
 is an end-to-end demo that needs no credentials. Details in
