@@ -33,10 +33,10 @@ check('--version', r.status === 0 && r.envelope?.ok && r.envelope.result.version
 
 r = run(['--cli-schema', '--json']);
 const ops = r.envelope?.operations ?? (() => { try { return JSON.parse(r.stdout).operations; } catch { return null; } })();
-check('--cli-schema lists 14 operations', r.status === 0 && Array.isArray(ops) && ops.length === 14,
+check('--cli-schema lists 22 operations', r.status === 0 && Array.isArray(ops) && ops.length === 22,
   `got ${ops?.length}`);
 const opNames = new Set((ops ?? []).map((o) => o.name));
-check('--cli-schema lists the oauth ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status'].every((n) => opNames.has(n)),
+check('--cli-schema lists OAuth and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store'].every((n) => opNames.has(n)),
   `names=${[...opNames].filter((n) => n.startsWith('oauth_')).join(',') || 'none'}`);
 
 r = run(['cred', 'set', 'smoke', 'api_key', '--stdin'], 'smoke-token-123');
@@ -50,6 +50,14 @@ check('cred list shows name only', r.status === 0 && r.envelope?.result?.some((c
 
 r = run(['cred', 'delete', 'smoke', 'api_key']);
 check('cred delete', r.status === 0 && r.envelope?.result?.deleted === true);
+
+r = run(['cred', 'oauth-store', 'smoke-owner/github', '--stdin'], JSON.stringify({
+  kind: 'oauth2', accessToken: 'synthetic-smoke-access', scopes: ['read:user'],
+  expiresAt: '2030-01-01T00:00:00.000Z', owner: 'smoke-owner', source: 'smoke',
+}));
+check('cred oauth-store returns a handle without the secret', r.status === 0 && r.envelope?.result?.handle === 'smoke-owner/github' && !r.stdout.includes('synthetic-smoke-access'));
+r = run(['oauth', 'list']);
+check('oauth list returns metadata without secret values', r.status === 0 && r.envelope?.result?.some((c) => c.handle === 'smoke-owner/github' && c.service === 'smoke-owner/github' && c.owner === 'smoke-owner') && !r.stdout.includes('synthetic-smoke-access'));
 
 r = run(['llm', 'providers']);
 check('llm providers lists 7', r.status === 0 && Array.isArray(r.envelope?.result) && r.envelope.result.length === 7,

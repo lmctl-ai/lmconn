@@ -111,6 +111,26 @@
       "params": []
     },
     {
+      "name": "cred_oauth_store",
+      "access": "write",
+      "description": "Atomically store an OAuth2 token from JSON stdin and return its service handle",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Provider/account service handle"
+        },
+        {
+          "name": "stdin",
+          "type": "boolean",
+          "occurs": "1",
+          "description": "Read the token and metadata JSON from stdin"
+        }
+      ]
+    },
+    {
       "name": "llm_providers",
       "access": "read",
       "description": "List providers and credential sources (never keys)",
@@ -288,6 +308,12 @@
           "description": "Override stored oauth_auth_url"
         },
         {
+          "name": "deviceUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_device_url"
+        },
+        {
           "name": "tokenUrl",
           "type": "string",
           "occurs": "?",
@@ -310,6 +336,18 @@
           "type": "string",
           "occurs": "?",
           "description": "Override stored oauth_auth_style"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_owner"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_source"
         },
         {
           "name": "port",
@@ -368,6 +406,61 @@
           "type": "string",
           "positional": true,
           "description": "Credential service name"
+        }
+      ]
+    },
+    {
+      "name": "oauth_list",
+      "access": "read",
+      "description": "List OAuth credential metadata without tokens",
+      "params": []
+    },
+    {
+      "name": "oauth_device",
+      "access": "write",
+      "description": "Authorize with an OAuth2 device code",
+      "params": [
+        {
+          "name": "service",
+          "type": "string",
+          "positional": true,
+          "description": "Credential service name"
+        },
+        {
+          "name": "clientId",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_client_id"
+        },
+        {
+          "name": "deviceUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_device_url"
+        },
+        {
+          "name": "tokenUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_token_url"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_scope"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_owner"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "occurs": "?",
+          "description": "Override stored oauth_source"
         }
       ]
     },

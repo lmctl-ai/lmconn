@@ -8,7 +8,8 @@ import { emit, ok, emitFail } from './result.js';
 // import attribute so the table is embedded in bun-compiled binaries.
 import presets from './oauth-presets.json' with { type: 'json' };
 
-const fields = ['client-id', 'client-secret', 'auth-url', 'token-url', 'scope', 'auth-query', 'auth-style'];
+const fields = ['client-id', 'client-secret', 'auth-url', 'device-url', 'token-url', 'scope', 'auth-query', 'auth-style', 'owner', 'source'];
+const deviceFields = ['client-id', 'device-url', 'token-url', 'scope', 'owner', 'source'];
 const fieldName = (name) => 'oauth_' + name.replaceAll('-', '_');
 const presetKey = (name) => name.replaceAll('-', '_');
 const serviceParam = { name: 'service', type: 'string', positional: true, description: 'Credential service name' };
@@ -24,25 +25,30 @@ export const ops = [
   ] },
   { name: 'oauth_refresh', access: 'write', description: 'Refresh stored OAuth credentials', params: [serviceParam] },
   { name: 'oauth_status', access: 'read', description: 'Show OAuth status without tokens', params: [serviceParam] },
+  { name: 'oauth_list', access: 'read', description: 'List OAuth credential metadata without tokens', params: [] },
+  { name: 'oauth_device', access: 'write', description: 'Authorize with an OAuth2 device code', params: [
+    serviceParam,
+    ...deviceFields.map(name => ({ name, type: 'string', occurs: '?', description: `Override stored ${fieldName(name)}` })),
+  ] },
 ];
 
 class OAuthError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
 const error = (code, message) => new OAuthError(code, message);
-const usage = () => error('USAGE', 'Usage: oauth authorize <service> [options] | refresh <service> | status <service>');
+const usage = () => error('USAGE', 'Usage: oauth authorize <service> [options] | device <service> [options] | refresh <service> | status <service> | list');
 
 function parse(args) {
   const [command, service, ...rest] = args;
-  if (!['authorize', 'refresh', 'status'].includes(command) || !service || service.startsWith('-')) throw usage();
+  if (!['authorize', 'device', 'refresh', 'status', 'list'].includes(command) || (command !== 'list' && (!service || service.startsWith('-')))) throw usage();
   const options = {};
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--json') continue;
-    if (command !== 'authorize' || !rest[i].startsWith('--')) throw usage();
+    if (!['authorize', 'device'].includes(command) || !rest[i].startsWith('--')) throw usage();
     const key = rest[i].slice(2);
     if (Object.hasOwn(options, key)) throw usage();
-    if (['manual', 'no-pkce', 'auto-follow'].includes(key)) options[key] = true;
-    else if ([...fields, 'port', 'timeout'].includes(key)) {
+    if (command === 'authorize' && ['manual', 'no-pkce', 'auto-follow'].includes(key)) options[key] = true;
+    else if ([...(command === 'device' ? deviceFields : fields), ...(command === 'authorize' ? ['port', 'timeout'] : [])].includes(key)) {
       if (rest[i + 1] === undefined || rest[i + 1].startsWith('--')) throw usage();
       options[key] = rest[++i];
     } else throw usage();
@@ -52,6 +58,7 @@ function parse(args) {
   options.timeout = Number(options.timeout ?? 300000);
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535 ||
       !Number.isSafeInteger(options.timeout) || options.timeout < 1 || options.timeout > 2147483647) throw usage();
+  if (command === 'list' && (service !== undefined || rest.length)) throw usage();
   return { command, service, options };
 }
 
@@ -103,6 +110,7 @@ function save(service, cfg, { token, expiresAt }, refresh) {
   const db = openDb();
   db.exec('BEGIN');
   try {
+    setCred(service, 'oauth_kind', 'oauth2', db);
     for (const name of fields) setCred(service, fieldName(name), cfg[name], db);
     setCred(service, 'oauth_access_token', token.access_token, db);
     if (token.refresh_token) setCred(service, 'oauth_refresh_token', token.refresh_token, db);
@@ -121,6 +129,85 @@ export function status(service) {
   return { service, authorized: !!getCred(service, 'oauth_access_token'), expiresAt,
     expired: expiresAt !== null && (!Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now()),
     hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '', tokenUrl: getCred(service, 'oauth_token_url') };
+}
+
+export function list() {
+  const db = openDb();
+  const services = db.prepare('SELECT DISTINCT service FROM creds WHERE field = ? ORDER BY service').all('oauth_access_token');
+  return services.map(({ service }) => ({
+    service, provider: service, handle: service, kind: getCred(service, 'oauth_kind', db) || 'oauth2', owner: getCred(service, 'oauth_owner', db) || '',
+    source: getCred(service, 'oauth_source', db) || '', scopes: getCred(service, 'oauth_scope', db) || '',
+    expiresAt: getCred(service, 'oauth_expires_at', db), hasRefreshToken: !!getCred(service, 'oauth_refresh_token', db),
+  }));
+}
+
+function providerUrl(value, name) {
+  let url;
+  try { url = new URL(value); } catch { throw error('USAGE', `${name} must be an HTTP(S) URL`); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw error('USAGE', `${name} must be an HTTP(S) URL without userinfo or fragment`);
+  return url;
+}
+
+async function deviceAuthorize(service, options, hooks) {
+  const cfg = config(service, options, false);
+  if (!cfg['device-url']) throw error('MISSING_CONFIG', `Missing oauth_device_url; set with cred set ${service} oauth_device_url --value ...`);
+  const deviceUrl = providerUrl(cfg['device-url'], 'oauth_device_url');
+  const tokenUrl = providerUrl(cfg['token-url'], 'oauth_token_url');
+  const initialInterval = 5;
+  const deviceResponse = await fetch(deviceUrl, {
+    method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: cfg['client-id'], scope: cfg.scope }), redirect: 'error',
+  });
+  let grant;
+  try { grant = await deviceResponse.json(); } catch { throw error('OAUTH_ERROR', 'OAuth device authorization failed'); }
+  const expirySeconds = Number(grant?.expires_in);
+  const pollSeconds = Number(grant?.interval ?? initialInterval);
+  const deviceCode = grant?.device_code;
+  const userCode = grant?.user_code;
+  const verification = grant?.verification_uri;
+  const completeVerification = grant?.verification_uri_complete;
+  if (!deviceResponse.ok || typeof deviceCode !== 'string' || !deviceCode || typeof userCode !== 'string' || !userCode ||
+      typeof verification !== 'string' || (completeVerification !== undefined && typeof completeVerification !== 'string') ||
+      !Number.isSafeInteger(expirySeconds) || expirySeconds < 1 ||
+      !Number.isSafeInteger(pollSeconds) || pollSeconds < 1) throw error('OAUTH_ERROR', 'OAuth device authorization response is invalid');
+  const verificationUrl = providerUrl(verification, 'verification_uri');
+  const completeUrl = completeVerification ? providerUrl(completeVerification, 'verification_uri_complete') : null;
+  process.stderr.write(`Open ${(completeUrl || verificationUrl).href} and enter code ${userCode}\n`);
+  let intervalMs = pollSeconds * 1000;
+  const expiresAtMs = Date.now() + expirySeconds * 1000;
+  const wait = hooks.wait || (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
+  while (Date.now() < expiresAtMs) {
+    await wait(intervalMs);
+    if (Date.now() >= expiresAtMs) break;
+    let response;
+    try {
+      response = await fetch(tokenUrl, {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: deviceCode, client_id: cfg['client-id'],
+        }), redirect: 'error',
+      });
+    } catch { throw error('OAUTH_ERROR', 'OAuth device token request failed'); }
+    let token;
+    try { token = await response.json(); } catch { throw error('OAUTH_ERROR', 'OAuth device token response is invalid'); }
+    if (token?.error === 'authorization_pending') continue;
+    if (token?.error === 'slow_down') { intervalMs += 5000; continue; }
+    if (token?.error === 'access_denied') throw error('DENIED', 'OAuth device authorization was denied');
+    if (token?.error === 'expired_token') throw error('RECONNECT', 'OAuth device code expired; start authorization again');
+    if (!response.ok || !token || typeof token.access_token !== 'string' || !token.access_token || token.error) throw error('OAUTH_ERROR', 'OAuth device token exchange failed');
+    if (token.refresh_token !== undefined && (typeof token.refresh_token !== 'string' || !token.refresh_token)) throw error('OAUTH_ERROR', 'Invalid OAuth token response');
+    if (token.token_type !== undefined && typeof token.token_type !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
+    if (token.scope !== undefined && typeof token.scope !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
+    let expiresAt = null;
+    if (token.expires_in !== undefined) {
+      const seconds = Number(token.expires_in);
+      const date = new Date(Date.now() + seconds * 1000);
+      if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(date.getTime())) throw error('OAUTH_ERROR', 'Invalid OAuth expiry');
+      expiresAt = date.toISOString();
+    }
+    return save(service, cfg, { token, expiresAt }, false);
+  }
+  throw error('EXPIRED', 'OAuth device authorization expired');
 }
 
 // Silent helper for HTTP connector integration: stores fresh tokens, returns metadata only.
@@ -235,7 +322,7 @@ async function authorize(service, options, hooks) {
 export async function run(args, hooks = {}) {
   try {
     const { command, service, options } = parse(args);
-    const result = command === 'status' ? status(service) : command === 'refresh' ? await refresh(service) : await authorize(service, options, hooks);
+    const result = command === 'list' ? list() : command === 'status' ? status(service) : command === 'refresh' ? await refresh(service) : command === 'device' ? await deviceAuthorize(service, options, hooks) : await authorize(service, options, hooks);
     emit(ok(result));
     return 0;
   } catch (err) {

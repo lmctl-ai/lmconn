@@ -20,14 +20,46 @@ export const ops = [
   { name: 'cred list', access: 'read', description: 'List credential names and timestamps only', params: [] },
   { name: 'cred delete', access: 'write', description: 'Delete a credential', params: [...identity] },
   { name: 'cred path', access: 'read', description: 'Return the credential database path', params: [] },
+  { name: 'cred oauth-store', access: 'write', description: 'Atomically store an OAuth2 token from JSON stdin and return its service handle', params: [
+    { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Provider/account service handle' },
+    { name: 'stdin', type: 'boolean', occurs: '1', description: 'Read the token and metadata JSON from stdin' },
+  ] },
 ];
+
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function oauthInput(text) {
+  let input;
+  try { input = JSON.parse(text); } catch { throw new Error('invalid input'); }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid input');
+  const allowed = ['kind', 'accessToken', 'refreshToken', 'scopes', 'expiresAt', 'owner', 'source'];
+  if (Object.keys(input).some(key => !allowed.includes(key))) throw new Error('invalid input');
+  if (input.kind !== 'oauth2' || typeof input.accessToken !== 'string' || !input.accessToken ||
+      typeof input.owner !== 'string' || !input.owner || typeof input.source !== 'string' || !input.source) throw new Error('invalid input');
+  if (input.refreshToken !== undefined && (typeof input.refreshToken !== 'string' || !input.refreshToken)) throw new Error('invalid input');
+  const scopes = Array.isArray(input.scopes) ? input.scopes : typeof input.scopes === 'string' ? [input.scopes] : null;
+  if (!scopes || scopes.some(scope => typeof scope !== 'string' || !scope)) throw new Error('invalid input');
+  let expiresAt = null;
+  if (input.expiresAt !== undefined && input.expiresAt !== null) {
+    const timestamp = Date.parse(input.expiresAt);
+    if (typeof input.expiresAt !== 'string' || !Number.isFinite(timestamp)) throw new Error('invalid input');
+    expiresAt = new Date(timestamp).toISOString();
+  }
+  return { ...input, scopes: scopes.join(' '), expiresAt };
+}
 
 export async function run(args) {
   const [command, service, field, ...options] = args;
-  const usage = () => emitFail('USAGE', 'Usage: cred set <service> <field> (--value V | --env VAR | --stdin), get <service> <field> [--reveal], delete <service> <field>, list, or path');
-  if (!['set', 'get', 'list', 'delete', 'path'].includes(command)) return usage();
+  const usage = () => emitFail('USAGE', 'Usage: cred set <service> <field> (--value V | --env VAR | --stdin), oauth-store <service> --stdin, get <service> <field> [--reveal], delete <service> <field>, list, or path');
+  if (!['set', 'get', 'list', 'delete', 'path', 'oauth-store'].includes(command)) return usage();
   if (command === 'list' || command === 'path') {
     if (args.length !== 1) return usage();
+  } else if (command === 'oauth-store') {
+    if (!service || service.startsWith('--') || field !== '--stdin' || options.length) return usage();
   } else {
     if (!service || !field || service.startsWith('--') || field.startsWith('--')) return usage();
     if (command === 'delete' && options.length) return usage();
@@ -41,7 +73,25 @@ export async function run(args) {
   let db;
   let result;
   try {
-    if (command === 'path') {
+    if (command === 'oauth-store') {
+      const input = oauthInput(await readStdin());
+      db = openDb();
+      db.exec('BEGIN');
+      try {
+        setCred(service, 'oauth_kind', input.kind, db);
+        setCred(service, 'oauth_access_token', input.accessToken, db);
+        setCred(service, 'oauth_token_type', 'Bearer', db);
+        if (input.refreshToken) setCred(service, 'oauth_refresh_token', input.refreshToken, db);
+        else deleteCred(service, 'oauth_refresh_token', db);
+        setCred(service, 'oauth_scope', input.scopes, db);
+        if (input.expiresAt) setCred(service, 'oauth_expires_at', input.expiresAt, db);
+        else deleteCred(service, 'oauth_expires_at', db);
+        setCred(service, 'oauth_owner', input.owner, db);
+        setCred(service, 'oauth_source', input.source, db);
+        db.exec('COMMIT');
+      } catch (err) { db.exec('ROLLBACK'); throw err; }
+      result = { provider: service, handle: service, kind: 'oauth2', stored: true };
+    } else if (command === 'path') {
       result = { path: dbPath() };
     } else {
       let value;
@@ -73,9 +123,10 @@ export async function run(args) {
         result = { deleted: deleteCred(service, field, db) };
       }
     }
-  } catch {
+  } catch (err) {
     // Never echo underlying errors: they can contain credential input.
-    return emitFail('CREDENTIAL_ERROR', 'Credential operation failed');
+    return emitFail(command === 'oauth-store' && err?.message === 'invalid input' ? 'CREDENTIAL_INPUT' : 'CREDENTIAL_ERROR',
+      command === 'oauth-store' && err?.message === 'invalid input' ? 'OAuth credential input is invalid' : 'Credential operation failed');
   }
   // The connection stays cached (creds.js); the process exits after one
   // command and the runtime closes it. Long-lived hosts call closeDb().

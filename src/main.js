@@ -19,11 +19,11 @@ const USAGE = [
   'usage:',
   '  lmconn --version',
   '  lmconn --cli-schema --json        print the cli.schema.v1 document',
-  '  lmconn cred <set|get|list|delete> ...',
+  '  lmconn cred <set|get|list|delete|oauth-store> ...',
   '  lmconn llm <providers|chat|probe> ...',
   '  lmconn http <request> ...',
   '  lmconn github <...> ...',
-  '  lmconn oauth <authorize|refresh|status> ...',
+  '  lmconn oauth <authorize|device|refresh|status|list> ...',
   '  lmconn valkey <ping|get|set|del|cmd> ...',
 ].join('\n');
 
