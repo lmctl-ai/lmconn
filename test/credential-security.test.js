@@ -33,3 +33,24 @@ test('SQL failure after several writes and crash mid-write cannot expose mixed b
  db.exec('DROP TRIGGER fail_late');const program=`import {openDb,setCred,getCred} from ${JSON.stringify(new URL('../src/creds.js',import.meta.url).href)};import {run} from ${JSON.stringify(new URL('../src/cmd-cred.js',import.meta.url).href)};const db=openDb();db.function('fault',()=>{if(process.argv[1]==='crash')process.exit(71);throw Error('CANARY_ERROR')});db.exec("CREATE TEMP TRIGGER fail_late AFTER UPDATE ON creds WHEN NEW.service='atomic' AND NEW.field='oauth_owner' BEGIN SELECT fault(); END");process.stdin.push(${JSON.stringify(JSON.stringify(grant()))});process.stdin.push(null);process.exitCode=await run(['oauth-store','atomic','--stdin']);`;
  for(const mode of ['fault','crash']){const r=spawnSync(process.execPath,['--input-type=module','-e',program,mode],{env:process.env,encoding:'utf8',maxBuffer:Infinity});assert.equal(r.status,mode==='crash'?71:1);assert.equal(getCred('atomic','oauth_access_token'),'OLD');assert.equal(getCred('atomic','oauth_refresh_token'),'OLD_REFRESH');assert.ok(!r.stdout.includes('CANARY_ERROR'));}
 });
+
+test('protected keys cannot escape through generic GitHub/LLM adapters',{skip:process.platform==='win32'},async t=>{
+ const {main}=await import('../src/main.js');for(const service of ['github','deepseek'])assert.equal(invoke(['cred','store',service,'--stdin'],bound({kind:'bearer',refreshToken:undefined})).code,0);
+ let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({login:access,choices:[{message:{content:access}}]})});
+ const w=process.stdout.write;let out='';process.stdout.write=function(x,...rest){if(typeof x!=='string')return w.call(this,x,...rest);out+=x;return true;};
+ try{for(const args of [['github','user'],['llm','chat','deepseek','--prompt','hello'],['llm','probe','deepseek']]){out='';assert.equal(await main(args),1);assert.equal(JSON.parse(out).error.code,'CREDENTIAL_POLICY');assert.ok(!out.includes(access));}assert.equal(calls,0);}finally{process.stdout.write=w;}
+});
+
+test('protected refresh configuration is explicit, mismatch-refused, and nonexportability persists without broker env',{skip:process.platform==='win32'},async()=>{
+ const config={tokenUrl:'https://token.invalid/rotate',clientId:'verified-client',clientSecret:'CLIENT_CANARY',authStyle:'body'};
+ assert.equal(invoke(['cred','store','rotate','--stdin'],bound({refresh:config,expiresAt:'2000-01-01'})).code,0);
+ assert.equal(invoke(['cred','store','rotate','--stdin'],bound({refresh:{...config,tokenUrl:'https://other.invalid/token'}})).code,1);
+ let calls=0;const result=await request(parseArgs(['request','https://api.invalid/use','--auth','rotate']),async(u,o)=>{calls++;if(calls===1){assert.equal(u,'https://token.invalid/rotate');assert.equal(new URLSearchParams(o.body).get('refresh_token'),refresh);return Response.json({access_token:'ROTATED_SAFE',scope:'read'});}assert.equal(o.headers.get('authorization'),'Bearer ROTATED_SAFE');return Response.json({})});assert.equal(calls,2);assert.equal(result.bodyOmitted,true);assert.equal(invoke(['cred','get','rotate','oauth_access_token','--reveal']).code,1);
+ const simulated=`Object.defineProperty(process,'platform',{value:'win32'});const{openDb}=await import(${JSON.stringify(new URL('../src/creds.js',import.meta.url).href)});try{openDb();process.exitCode=7}catch(e){if(e.code!=='STORE_SECURITY')throw e}`;
+ const win=spawnSync(process.execPath,['--input-type=module','-e',simulated],{env:process.env,encoding:'utf8'});assert.equal(win.status,0,win.stderr);
+});
+
+test('secure deletion clears live SQLite freelist fragments and sidecars remain private',{skip:process.platform==='win32'},()=>{
+ const file=join(dir,'delete.db'),db=openDb(file),marker='DELETION_CANARY_';setCred('remove','oauth_access_token',marker.repeat(2000),db);db.prepare('DELETE FROM creds WHERE service=?').run('remove');closeDb(file);assert.ok(!fs.readFileSync(file).includes(Buffer.from(marker)));
+ const db2=openDb(file);db2.exec('PRAGMA journal_mode=WAL');setCred('wal','oauth_access_token',access,db2);for(const suffix of ['-wal','-shm'])assert.equal(fs.statSync(file+suffix).mode&0o777,0o600);closeDb(file);
+});

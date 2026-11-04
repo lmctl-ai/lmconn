@@ -1,5 +1,8 @@
 import { openDb, setCred, getCred, listCreds, deleteCred, dbPath } from './creds.js';
 import { emit, ok, emitFail } from './result.js';
+import { endpoint, origins, scopeText, redact, unsafeText, validSecret, securityError } from './oauth-security.js';
+import { secureStorePath } from './store-path.js';
+import { brokerMode, policy, putPolicy, refuseLegacyWrite, refuseReveal } from './credential-policy.js';
 
 const identity = [
   { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Service name' },
@@ -20,6 +23,10 @@ export const ops = [
   { name: 'cred list', access: 'read', description: 'List credential names and timestamps only', params: [] },
   { name: 'cred delete', access: 'write', description: 'Delete a credential', params: [...identity] },
   { name: 'cred path', access: 'read', description: 'Return the credential database path', params: [] },
+  { name: 'cred store', access: 'write', description: 'Store an issuer/origin-bound nonexportable Bearer or OAuth2 grant from JSON stdin', params: [
+    { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Broker-owned credential handle' },
+    { name: 'stdin', type: 'boolean', occurs: '1', description: 'Read the grant and binding from stdin' },
+  ] },
   { name: 'cred oauth-store', access: 'write', description: 'Atomically store an OAuth2 token from JSON stdin and return its service handle', params: [
     { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Provider/account service handle' },
     { name: 'stdin', type: 'boolean', occurs: '1', description: 'Read the token and metadata JSON from stdin' },
@@ -32,33 +39,89 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function oauthInput(text) {
+function oauthInput(text, protectedStore, service) {
   let input;
   try { input = JSON.parse(text); } catch { throw new Error('invalid input'); }
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid input');
-  const allowed = ['kind', 'accessToken', 'refreshToken', 'scopes', 'expiresAt', 'owner', 'source'];
-  if (Object.keys(input).some(key => !allowed.includes(key))) throw new Error('invalid input');
-  if (input.kind !== 'oauth2' || typeof input.accessToken !== 'string' || !input.accessToken ||
-      typeof input.owner !== 'string' || !input.owner || typeof input.source !== 'string' || !input.source) throw new Error('invalid input');
-  if (input.refreshToken !== undefined && (typeof input.refreshToken !== 'string' || !input.refreshToken)) throw new Error('invalid input');
+  const invalid = () => { throw new Error('invalid input'); };
+  if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
+  const allowed = ['kind', 'accessToken', 'refreshToken', 'scopes', 'expiresAt', 'owner', 'source', ...(protectedStore ? ['issuer', 'allowedOrigins', 'refresh'] : [])];
+  if (Object.keys(input).some(key => !allowed.includes(key))) invalid();
+  if (!(protectedStore ? ['oauth2', 'bearer'].includes(input.kind) : input.kind === 'oauth2') ||
+      !validSecret(input.accessToken) || typeof input.owner !== 'string' || !input.owner ||
+      typeof input.source !== 'string' || !input.source) invalid();
+  if (input.refreshToken !== undefined && (!validSecret(input.refreshToken) || input.kind !== 'oauth2')) invalid();
   const scopes = Array.isArray(input.scopes) ? input.scopes : typeof input.scopes === 'string' ? [input.scopes] : null;
-  if (!scopes || scopes.some(scope => typeof scope !== 'string' || !scope)) throw new Error('invalid input');
+  if (!scopes || scopes.some(scope => typeof scope !== 'string' || !scope)) invalid();
+  const secrets = [input.accessToken, input.refreshToken, input.refresh?.clientSecret];
+  if ([service, input.owner, input.source].some(v => unsafeText(v) || redact(v, secrets) !== v)) invalid();
+  try { input.scopes = scopeText(scopes.join(' '), '', secrets); } catch { invalid(); }
   let expiresAt = null;
   if (input.expiresAt !== undefined && input.expiresAt !== null) {
-    const timestamp = Date.parse(input.expiresAt);
-    if (typeof input.expiresAt !== 'string' || !Number.isFinite(timestamp)) throw new Error('invalid input');
-    expiresAt = new Date(timestamp).toISOString();
+    if (typeof input.expiresAt !== 'string' || !Number.isFinite(Date.parse(input.expiresAt))) invalid();
+    expiresAt = new Date(input.expiresAt).toISOString();
   }
-  return { ...input, scopes: scopes.join(' '), expiresAt };
+  let binding = null;
+  if (protectedStore) {
+    const issuer = endpoint(input.issuer, 'Credential issuer');
+    if (issuer.search || redact(input.issuer, secrets) !== input.issuer) invalid();
+    binding = { noReveal: true, kind: input.kind, issuer: issuer.href, owner: input.owner, origins: origins(input.allowedOrigins), refresh: null };
+    if (input.refresh !== undefined) {
+      const cfg = input.refresh;
+      if (input.kind !== 'oauth2' || !cfg || typeof cfg !== 'object' || Array.isArray(cfg) ||
+          Object.keys(cfg).some(k => !['tokenUrl', 'clientId', 'clientSecret', 'authStyle'].includes(k)) ||
+          typeof cfg.clientId !== 'string' || !cfg.clientId || (cfg.clientSecret !== undefined && typeof cfg.clientSecret !== 'string') ||
+          !['header', 'body'].includes(cfg.authStyle || 'header')) invalid();
+      binding.refresh = { tokenUrl: endpoint(cfg.tokenUrl, 'Bound refresh endpoint').href, clientId: cfg.clientId, authStyle: cfg.authStyle || 'header' };
+      if (redact(JSON.stringify(binding), secrets) !== JSON.stringify(binding)) invalid();
+    }
+  }
+  if (binding && redact(JSON.stringify(binding), secrets) !== JSON.stringify(binding)) invalid();
+  return { ...input, expiresAt, binding };
+}
+const configFields = ['oauth_client_id', 'oauth_client_secret', 'oauth_auth_url', 'oauth_device_url', 'oauth_token_url', 'oauth_auth_query', 'oauth_auth_style', 'api_key'];
+function store(service, input, protectedStore) {
+  const db = openDb();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const old = policy(service, db);
+    if (old?.noReveal) {
+      if (!protectedStore || JSON.stringify(old) !== JSON.stringify(input.binding)) throw securityError('Credential issuer/client/origin binding mismatch');
+    } else if (!protectedStore) refuseLegacyWrite(service, db);
+    for (const field of configFields) deleteCred(service, field, db);
+    setCred(service, 'oauth_kind', input.kind, db);
+    if (input.kind === 'bearer') {
+      for (const field of ['oauth_access_token', 'oauth_refresh_token', 'oauth_expires_at', 'oauth_token_type']) deleteCred(service, field, db);
+      setCred(service, 'api_key', input.accessToken, db);
+    } else {
+      setCred(service, 'oauth_access_token', input.accessToken, db);
+      setCred(service, 'oauth_token_type', 'Bearer', db);
+      if (input.refreshToken) setCred(service, 'oauth_refresh_token', input.refreshToken, db);
+      else deleteCred(service, 'oauth_refresh_token', db);
+      if (input.expiresAt) setCred(service, 'oauth_expires_at', input.expiresAt, db);
+      else deleteCred(service, 'oauth_expires_at', db);
+    }
+    if (input.expiresAt) setCred(service, 'oauth_expires_at', input.expiresAt, db);
+    else deleteCred(service, 'oauth_expires_at', db);
+    setCred(service, 'oauth_scope', input.scopes, db);
+    setCred(service, 'oauth_owner', input.owner, db);
+    setCred(service, 'oauth_source', input.source, db);
+    if (input.binding?.refresh) {
+      const cfg = input.binding.refresh;
+      setCred(service, 'oauth_token_url', cfg.tokenUrl, db); setCred(service, 'oauth_client_id', cfg.clientId, db);
+      setCred(service, 'oauth_auth_style', cfg.authStyle, db); setCred(service, 'oauth_client_secret', input.refresh.clientSecret || '', db);
+    }
+    putPolicy(service, input.binding || { noReveal: false, kind: 'oauth2', issuer: null, owner: input.owner, origins: [], refresh: null }, db);
+    db.exec('COMMIT');
+  } catch (err) { db.exec('ROLLBACK'); throw err; }
 }
 
 export async function run(args) {
   const [command, service, field, ...options] = args;
   const usage = () => emitFail('USAGE', 'Usage: cred set <service> <field> (--value V | --env VAR | --stdin), oauth-store <service> --stdin, get <service> <field> [--reveal], delete <service> <field>, list, or path');
-  if (!['set', 'get', 'list', 'delete', 'path', 'oauth-store'].includes(command)) return usage();
+  if (!['set', 'get', 'list', 'delete', 'path', 'oauth-store', 'store'].includes(command)) return usage();
   if (command === 'list' || command === 'path') {
     if (args.length !== 1) return usage();
-  } else if (command === 'oauth-store') {
+  } else if ((command === 'oauth-store' || command === 'store')) {
     if (!service || service.startsWith('--') || field !== '--stdin' || options.length) return usage();
   } else {
     if (!service || !field || service.startsWith('--') || field.startsWith('--')) return usage();
@@ -73,24 +136,13 @@ export async function run(args) {
   let db;
   let result;
   try {
-    if (command === 'oauth-store') {
-      const input = oauthInput(await readStdin());
-      db = openDb();
-      db.exec('BEGIN');
-      try {
-        setCred(service, 'oauth_kind', input.kind, db);
-        setCred(service, 'oauth_access_token', input.accessToken, db);
-        setCred(service, 'oauth_token_type', 'Bearer', db);
-        if (input.refreshToken) setCred(service, 'oauth_refresh_token', input.refreshToken, db);
-        else deleteCred(service, 'oauth_refresh_token', db);
-        setCred(service, 'oauth_scope', input.scopes, db);
-        if (input.expiresAt) setCred(service, 'oauth_expires_at', input.expiresAt, db);
-        else deleteCred(service, 'oauth_expires_at', db);
-        setCred(service, 'oauth_owner', input.owner, db);
-        setCred(service, 'oauth_source', input.source, db);
-        db.exec('COMMIT');
-      } catch (err) { db.exec('ROLLBACK'); throw err; }
-      result = { provider: service, handle: service, kind: 'oauth2', stored: true };
+    if ((command === 'oauth-store' || command === 'store')) {
+      const protectedStore = command === 'store';
+      const input = oauthInput(await readStdin(), protectedStore, service);
+      if (protectedStore) secureStorePath(dbPath(), true);
+      else if (brokerMode()) throw securityError('Broker mode requires cred store');
+      store(service, input, protectedStore);
+      result = { provider: service, handle: service, kind: input.kind, stored: true };
     } else if (command === 'path') {
       result = { path: dbPath() };
     } else {
@@ -109,6 +161,8 @@ export async function run(args) {
         }
       }
       db = openDb();
+      if (command === 'set') refuseLegacyWrite(service, db);
+      if (command === 'get' && options.length) refuseReveal(service, db);
       if (command === 'set') {
         setCred(service, field, value, db);
         result = { service, field, stored: true };
@@ -125,8 +179,9 @@ export async function run(args) {
     }
   } catch (err) {
     // Never echo underlying errors: they can contain credential input.
-    return emitFail(command === 'oauth-store' && err?.message === 'invalid input' ? 'CREDENTIAL_INPUT' : 'CREDENTIAL_ERROR',
-      command === 'oauth-store' && err?.message === 'invalid input' ? 'OAuth credential input is invalid' : 'Credential operation failed');
+    if (['CREDENTIAL_POLICY', 'STORE_SECURITY'].includes(err.code)) return emitFail(err.code, err.message);
+    return emitFail(['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'CREDENTIAL_INPUT' : 'CREDENTIAL_ERROR',
+      ['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'OAuth credential input is invalid' : 'Credential operation failed');
   }
   // The connection stays cached (creds.js); the process exits after one
   // command and the runtime closes it. Long-lived hosts call closeDb().

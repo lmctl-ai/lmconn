@@ -6,7 +6,9 @@
 
 import { readFile } from 'node:fs/promises';
 import { emit, ok, emitFail } from './result.js';
-import { getCred, setCred, deleteCred } from './creds.js';
+import { getCred, setCred, deleteCred, openDb } from './creds.js';
+import { endpoint, tokenResult, redact as redactValue } from './oauth-security.js';
+import { authorizeOrigin, checkRefresh, policy } from './credential-policy.js';
 
 const USAGE = 'usage: lmconn http request <url> [--method GET|POST|...] [--header "K: V"]... ' +
   '[--data STRING | --data-file PATH] [--auth SERVICE] [--timeout MS]';
@@ -27,7 +29,7 @@ export const ops = [
 
 // Env fallback for --auth: deepseek -> DEEPSEEK_API_KEY, ollama-cloud -> OLLAMA_CLOUD_API_KEY.
 export function envNameFor(service) {
-  return service.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_API_KEY';
+  return [...service.toUpperCase()].map(c => (c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') ? c : '_').join('') + '_API_KEY';
 }
 
 const reconnect = service => Object.assign(new Error(`OAuth authorization expired or revoked; run \`lmconn oauth authorize ${service}\` again`), { code: 'RECONNECT' });
@@ -43,6 +45,8 @@ export async function refreshOAuth(service, fetchImpl = globalThis.fetch, timeou
   const clientSecret = read('client_secret') ?? '';
   const style = read('auth_style') || 'header';
   if (!tokenUrl || !clientId || !['header', 'body'].includes(style)) throw refreshFailure();
+  const cfg = { 'token-url': tokenUrl, 'client-id': clientId, 'client-secret': clientSecret, 'auth-style': style, scope: read('scope') || '', previousRefresh: refreshToken };
+  checkRefresh(service, cfg);
   const form = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken });
   const headers = { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' };
   if (style === 'header') headers.authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
@@ -55,25 +59,28 @@ export async function refreshOAuth(service, fetchImpl = globalThis.fetch, timeou
   } catch { throw refreshFailure(); }
   if (data?.error === 'invalid_grant') throw reconnect(service);
   if (!response.ok || data?.error || typeof data?.access_token !== 'string' || !data.access_token) throw refreshFailure();
-  let expiresAt = null;
-  if (data.expires_in !== undefined) {
-    const seconds = Number(data.expires_in);
-    const expiry = Date.now() + seconds * 1000;
-    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(new Date(expiry).getTime())) throw refreshFailure();
-    expiresAt = new Date(expiry).toISOString();
-  }
-  setCred(service, 'oauth_access_token', data.access_token);
-  if (typeof data.refresh_token === 'string' && data.refresh_token) setCred(service, 'oauth_refresh_token', data.refresh_token);
-  if (expiresAt) setCred(service, 'oauth_expires_at', expiresAt);
-  else deleteCred(service, 'oauth_expires_at'); // A new token without a lifetime must not retain the old expired timestamp.
-  if (typeof data.token_type === 'string') setCred(service, 'oauth_token_type', data.token_type);
-  if (typeof data.scope === 'string') setCred(service, 'oauth_scope', data.scope);
+  let checked;
+  try { checked = tokenResult(data, cfg); } catch { throw refreshFailure(); }
+  const db = openDb(); db.exec('BEGIN');
+  try {
+    setCred(service, 'oauth_access_token', data.access_token, db);
+    if (data.refresh_token) setCred(service, 'oauth_refresh_token', data.refresh_token, db);
+    if (checked.expiresAt) setCred(service, 'oauth_expires_at', checked.expiresAt, db);
+    else deleteCred(service, 'oauth_expires_at', db);
+    if (data.token_type !== undefined) setCred(service, 'oauth_token_type', data.token_type, db);
+    if (data.scope !== undefined) setCred(service, 'oauth_scope', data.scope, db);
+    db.exec('COMMIT');
+  } catch (err) { db.exec('ROLLBACK'); throw err; }
   return data.access_token;
 }
 
 export async function resolveAuth(service, fetchImpl = globalThis.fetch, timeoutMs = 30000) {
   const stored = getCred(service, 'api_key');
-  if (stored) return stored;
+  if (stored) {
+    const expiry = getCred(service, 'oauth_expires_at');
+    if (policy(service)?.noReveal && expiry && Date.parse(expiry) <= Date.now()) throw reconnect(service);
+    return stored;
+  }
   const fromEnv = process.env[envNameFor(service)];
   if (fromEnv) return fromEnv;
   const accessToken = getCred(service, 'oauth_access_token');
@@ -111,12 +118,19 @@ export function parseArgs(args) {
   if (!req.url) throw usage(USAGE);
   let parsed;
   try { parsed = new URL(req.url); } catch { throw usage(`invalid url: ${req.url}`); }
-  if (!/^https?:$/.test(parsed.protocol)) throw usage(`unsupported protocol: ${parsed.protocol}`);
+  if (!['https:', 'http:'].includes(parsed.protocol)) throw usage(`unsupported protocol: ${parsed.protocol}`);
   if (req.data !== undefined && req.dataFile !== undefined) throw usage('use only one of --data and --data-file');
   for (const h of req.headers) {
-    if (!/^[^:\s]+\s*:/.test(h)) throw usage(`header must look like "Name: value": ${h}`);
+    if (!validHeader(h)) throw usage(`header must look like "Name: value": ${h}`);
   }
   return req;
+}
+
+function validHeader(value) {
+  const colon = value.indexOf(':'), name = value.slice(0, colon).trim();
+  if (colon < 1 || !name) return false;
+  for (const c of name) if (!(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || "!#$%&'*+-.^_`|~".includes(c))) return false;
+  return true;
 }
 
 function headerPairs(list) {
@@ -130,7 +144,8 @@ function headerPairs(list) {
 export async function request(req, fetchImpl = globalThis.fetch) {
   const headers = new Headers(headerPairs(req.headers));
   const secrets = [];
-  const redact = value => secrets.reduce((text, secret) => text.split(secret).join('[REDACTED]'), String(value));
+  const redact = value => redactValue(String(value), secrets);
+  let binding;
   let body = req.data;
   if (req.dataFile !== undefined) body = await readFile(req.dataFile, 'utf8');
   const method = req.method || (body !== undefined ? 'POST' : 'GET');
@@ -140,6 +155,7 @@ export async function request(req, fetchImpl = globalThis.fetch) {
     headers.set('content-type', isJson ? 'application/json' : 'text/plain; charset=utf-8');
   }
   if (req.auth !== undefined) {
+    binding = authorizeOrigin(req.auth, req.url);
     for (const field of ['api_key', 'oauth_access_token', 'oauth_refresh_token', 'oauth_client_secret']) {
       const value = getCred(req.auth, field);
       if (value) secrets.push(value);
@@ -155,16 +171,33 @@ export async function request(req, fetchImpl = globalThis.fetch) {
   }
   if (!headers.has('accept')) headers.set('accept', 'application/json, text/*;q=0.9, */*;q=0.8');
   const started = performance.now();
-  let response;
+  let response, current = new URL(req.url), verb = method, payload = (method === 'GET' || method === 'HEAD') ? undefined : body;
+  const signal = AbortSignal.timeout(req.timeout), seen = new Set();
   try {
-    response = await fetchImpl(req.url, {
-      method, headers, body: (method === 'GET' || method === 'HEAD') ? undefined : body,
-      redirect: 'follow', signal: AbortSignal.timeout(req.timeout),
-    });
+    while (true) {
+      const key = verb + ' ' + current.href;
+      if (seen.has(key)) throw Error('HTTP redirect cycle');
+      seen.add(key);
+      response = await fetchImpl(current.href, { method: verb, headers, body: payload, redirect: 'manual', signal });
+      if (![301, 302, 303, 307, 308].includes(response.status) || !response.headers.has('location')) break;
+      const next = new URL(response.headers.get('location'), current);
+      if (!['http:', 'https:'].includes(next.protocol) || next.username || next.password) throw Error('Invalid HTTP redirect');
+      if (next.origin !== current.origin) {
+        for (const name of ['authorization', 'proxy-authorization', 'cookie']) headers.delete(name);
+      }
+      if (response.status === 303 && verb !== 'HEAD' || [301, 302].includes(response.status) && verb === 'POST') {
+        verb = 'GET'; payload = undefined; headers.delete('content-type'); headers.delete('content-length');
+      }
+      await response.body?.cancel(); current = next;
+    }
   } catch (err) {
     const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-    throw Object.assign(new Error(timedOut ? `request timed out after ${req.timeout} ms` : `request failed: ${redact(err?.cause?.message || err?.message || err)}`),
+    throw Object.assign(new Error(timedOut ? `request timed out after ${req.timeout} ms` : `request failed: ${binding?.noReveal ? 'transport failure' : redact(err?.cause?.message || err?.message || err)}`),
       { code: timedOut ? 'TIMEOUT' : 'NETWORK' });
+  }
+  if (binding?.noReveal) {
+    await response.body?.cancel();
+    return { status: response.status, ok: response.status < 400, contentType: null, latencyMs: Math.round(performance.now() - started), url: new URL(req.url).origin, bodyOmitted: true };
   }
   const text = await response.text();
   const latencyMs = Math.round(performance.now() - started);
@@ -191,9 +224,9 @@ export async function run(args, deps = {}) {
     emit(ok(await request(req, deps.fetch)));
     return 0;
   } catch (err) {
-    const known = ['USAGE', 'MISSING_KEY', 'TIMEOUT', 'NETWORK', 'RECONNECT', 'OAUTH_REFRESH'];
+    const known = ['USAGE', 'MISSING_KEY', 'TIMEOUT', 'NETWORK', 'RECONNECT', 'OAUTH_REFRESH', 'CREDENTIAL_POLICY', 'STORE_SECURITY'];
     if (known.includes(err.code)) return emitFail(err.code, err.message);
     if (err.code === 'ENOENT') return emitFail('USAGE', `cannot read --data-file: ${err.path}`);
-    return emitFail('HTTP_ERROR', `http request failed: ${err.message}`);
+    return emitFail('HTTP_ERROR', 'HTTP request failed');
   }
 }
