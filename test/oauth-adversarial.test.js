@@ -67,7 +67,7 @@ for (const misbehave of ['bad-state', 'bad-json']) {
     const result = await scenario(t, misbehave, { misbehave });
     assert.equal(result.code, 1);
     assert.equal(result.envelope.ok, false);
-    assert.equal(result.envelope.error.code, 'OAUTH_ERROR');
+    assert.equal(result.envelope.error.code, misbehave === 'bad-state' ? 'TIMEOUT' : 'OAUTH_ERROR');
     assert.equal(result.status.authorized, false);
     assert.equal(getCred(misbehave, 'oauth_access_token'), null);
     if (misbehave === 'bad-state') assert.equal(result.idp.log.filter(r => r.path === '/token').length, 0);

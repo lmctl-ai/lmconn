@@ -7,6 +7,9 @@ import { emit, ok, emitFail } from './result.js';
 // Vendor endpoints/scopes mined from n8n's credential definitions; JSON
 // import attribute so the table is embedded in bun-compiled binaries.
 import presets from './oauth-presets.json' with { type: 'json' };
+import { endpoint, tokenResult, safeMetadata, unsafeText, callbackParameters, securityError } from './oauth-security.js';
+import { providerDeadline } from './oauth-deadline.js';
+import { refuseLegacyWrite, checkRefresh, policy, putPolicy } from './credential-policy.js';
 
 const fields = ['client-id', 'client-secret', 'auth-url', 'device-url', 'token-url', 'scope', 'auth-query', 'auth-style', 'owner', 'source'];
 const deviceFields = ['client-id', 'device-url', 'token-url', 'scope', 'owner', 'source'];
@@ -72,11 +75,8 @@ function config(service, options, authorize) {
     if (!cfg[name]) throw error('MISSING_CONFIG', `Missing ${fieldName(name)}; set with cred set ${service} ${fieldName(name)} --value ...${presets[service] ? '' : ', or use a service from src/oauth-presets.json'}`);
   }
   if (!['header', 'body'].includes(cfg['auth-style'])) throw error('USAGE', 'auth-style must be header or body');
-  for (const name of ['token-url', ...(authorize ? ['auth-url'] : [])]) {
-    let url;
-    try { url = new URL(cfg[name]); } catch { throw error('USAGE', `${fieldName(name)} must be an HTTP(S) URL`); }
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw error('USAGE', `${fieldName(name)} must be an HTTP(S) URL without userinfo or fragment`);
-  }
+  for (const name of ['token-url', ...(authorize ? ['auth-url'] : [])]) endpoint(cfg[name], fieldName(name));
+  cfg.previousRefresh = getCred(service, 'oauth_refresh_token');
   return cfg;
 }
 
@@ -93,23 +93,16 @@ async function exchange(cfg, params, signal) {
   if (!response.ok || !token || typeof token !== 'object' || token.error || typeof token.access_token !== 'string' || !token.access_token) {
     throw error('OAUTH_ERROR', 'OAuth token exchange failed');
   }
-  if (token.refresh_token !== undefined && (typeof token.refresh_token !== 'string' || !token.refresh_token)) throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-  if (token.token_type !== undefined && typeof token.token_type !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-  if (token.scope !== undefined && typeof token.scope !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-  let expiresAt = null;
-  if (token.expires_in !== undefined) {
-    const seconds = Number(token.expires_in);
-    const date = new Date(Date.now() + seconds * 1000);
-    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(date.getTime())) throw error('OAUTH_ERROR', 'Invalid OAuth expiry');
-    expiresAt = date.toISOString();
-  }
-  return { token, expiresAt };
+  return tokenResult(token, cfg);
 }
 
-function save(service, cfg, { token, expiresAt }, refresh) {
+function save(service, cfg, { token, expiresAt }, refresh, guard = () => {}) {
   const db = openDb();
   db.exec('BEGIN');
   try {
+    const previous = policy(service, db);
+    if (previous?.noReveal && !refresh) throw securityError('Protected grants require cred store');
+    if (!previous?.noReveal && !refresh) putPolicy(service, { noReveal: false, kind: 'oauth2', issuer: endpoint(cfg['token-url']).origin, owner: cfg.owner || null, origins: [], refresh: { tokenUrl: endpoint(cfg['token-url']).href, clientId: cfg['client-id'], authStyle: cfg['auth-style'] } }, db);
     setCred(service, 'oauth_kind', 'oauth2', db);
     for (const name of fields) setCred(service, fieldName(name), cfg[name], db);
     setCred(service, 'oauth_access_token', token.access_token, db);
@@ -119,95 +112,78 @@ function save(service, cfg, { token, expiresAt }, refresh) {
     else deleteCred(service, 'oauth_expires_at', db);
     setCred(service, 'oauth_token_type', token.token_type || 'Bearer', db);
     if (token.scope !== undefined) setCred(service, 'oauth_scope', token.scope, db);
+    guard();
     db.exec('COMMIT');
   } catch (err) { db.exec('ROLLBACK'); throw err; }
-  return { service, expiresAt, hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '' };
+  return safeMeta(service, { service, expiresAt, hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '' });
 }
+
+function safeMeta(service, value) { return safeMetadata(value, ['api_key', 'oauth_access_token', 'oauth_refresh_token', 'oauth_client_secret'].map(field => getCred(service, field))); }
 
 export function status(service) {
   const expiresAt = getCred(service, 'oauth_expires_at');
-  return { service, authorized: !!getCred(service, 'oauth_access_token'), expiresAt,
+  return safeMeta(service, { service, authorized: !!(getCred(service, 'oauth_access_token') || (getCred(service, 'oauth_kind') === 'bearer' && getCred(service, 'api_key'))), expiresAt,
     expired: expiresAt !== null && (!Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now()),
-    hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '', tokenUrl: getCred(service, 'oauth_token_url') };
+    hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '', tokenUrl: getCred(service, 'oauth_token_url') });
 }
 
 export function list() {
   const db = openDb();
-  const services = db.prepare('SELECT DISTINCT service FROM creds WHERE field = ? ORDER BY service').all('oauth_access_token');
-  return services.map(({ service }) => ({
+  const services = db.prepare("SELECT DISTINCT c.service FROM creds c WHERE c.field='oauth_access_token' OR (c.field='api_key' AND EXISTS (SELECT 1 FROM creds k WHERE k.service=c.service AND k.field='oauth_kind' AND k.value='bearer')) ORDER BY service").all();
+  return services.map(({ service }) => safeMeta(service, ({
     service, provider: service, handle: service, kind: getCred(service, 'oauth_kind', db) || 'oauth2', owner: getCred(service, 'oauth_owner', db) || '',
     source: getCred(service, 'oauth_source', db) || '', scopes: getCred(service, 'oauth_scope', db) || '',
     expiresAt: getCred(service, 'oauth_expires_at', db), hasRefreshToken: !!getCred(service, 'oauth_refresh_token', db),
-  }));
-}
-
-function providerUrl(value, name) {
-  let url;
-  try { url = new URL(value); } catch { throw error('USAGE', `${name} must be an HTTP(S) URL`); }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw error('USAGE', `${name} must be an HTTP(S) URL without userinfo or fragment`);
-  return url;
+  })));
 }
 
 async function deviceAuthorize(service, options, hooks) {
+  refuseLegacyWrite(service);
   const cfg = config(service, options, false);
-  if (!cfg['device-url']) throw error('MISSING_CONFIG', `Missing oauth_device_url; set with cred set ${service} oauth_device_url --value ...`);
-  const deviceUrl = providerUrl(cfg['device-url'], 'oauth_device_url');
-  const tokenUrl = providerUrl(cfg['token-url'], 'oauth_token_url');
-  const initialInterval = 5;
+  if (!cfg['device-url']) throw error('MISSING_CONFIG', 'Missing oauth_device_url');
+  const deviceUrl = endpoint(cfg['device-url'], 'oauth_device_url'), tokenUrl = endpoint(cfg['token-url'], 'oauth_token_url');
   const deviceResponse = await fetch(deviceUrl, {
     method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: cfg['client-id'], scope: cfg.scope }), redirect: 'error',
   });
+  const receivedAt = (hooks.now || (() => performance.now()))();
   let grant;
   try { grant = await deviceResponse.json(); } catch { throw error('OAUTH_ERROR', 'OAuth device authorization failed'); }
-  const expirySeconds = Number(grant?.expires_in);
-  const pollSeconds = Number(grant?.interval ?? initialInterval);
-  const deviceCode = grant?.device_code;
-  const userCode = grant?.user_code;
-  const verification = grant?.verification_uri;
-  const completeVerification = grant?.verification_uri_complete;
-  if (!deviceResponse.ok || typeof deviceCode !== 'string' || !deviceCode || typeof userCode !== 'string' || !userCode ||
-      typeof verification !== 'string' || (completeVerification !== undefined && typeof completeVerification !== 'string') ||
-      !Number.isSafeInteger(expirySeconds) || expirySeconds < 1 ||
-      !Number.isSafeInteger(pollSeconds) || pollSeconds < 1) throw error('OAUTH_ERROR', 'OAuth device authorization response is invalid');
-  const verificationUrl = providerUrl(verification, 'verification_uri');
-  const completeUrl = completeVerification ? providerUrl(completeVerification, 'verification_uri_complete') : null;
-  process.stderr.write(`Open ${(completeUrl || verificationUrl).href} and enter code ${userCode}\n`);
+  const expirySeconds = Number(grant?.expires_in), pollSeconds = Number(grant?.interval ?? 5);
+  const deviceCode = grant?.device_code, userCode = grant?.user_code;
+  if (!deviceResponse.ok || typeof deviceCode !== 'string' || !deviceCode || typeof userCode !== 'string' || !userCode || unsafeText(userCode) ||
+      typeof grant.verification_uri !== 'string' || (grant.verification_uri_complete !== undefined && typeof grant.verification_uri_complete !== 'string') ||
+      (!Number.isSafeInteger(expirySeconds) || !Number.isSafeInteger(expirySeconds * 1000)) || expirySeconds < 1 || (!Number.isSafeInteger(pollSeconds) || !Number.isSafeInteger(pollSeconds * 1000)) || pollSeconds < 1 ||
+      (!Number.isFinite(receivedAt + expirySeconds * 1000) || receivedAt + expirySeconds * 1000 > Number.MAX_SAFE_INTEGER)) throw error('OAUTH_ERROR', 'OAuth device authorization response is invalid');
+  const verification = endpoint(grant.verification_uri, 'verification_uri');
+  const complete = grant.verification_uri_complete ? endpoint(grant.verification_uri_complete, 'verification_uri_complete') : null;
+  process.stderr.write(`Open ${(complete || verification).href} and enter code ${userCode}\n`);
+  const lifetime = providerDeadline(receivedAt + expirySeconds * 1000, hooks);
   let intervalMs = pollSeconds * 1000;
-  const expiresAtMs = Date.now() + expirySeconds * 1000;
-  const wait = hooks.wait || (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
-  while (Date.now() < expiresAtMs) {
-    await wait(intervalMs);
-    if (Date.now() >= expiresAtMs) break;
-    let response;
-    try {
-      response = await fetch(tokenUrl, {
-        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: deviceCode, client_id: cfg['client-id'],
-        }), redirect: 'error',
-      });
-    } catch { throw error('OAUTH_ERROR', 'OAuth device token request failed'); }
-    let token;
-    try { token = await response.json(); } catch { throw error('OAUTH_ERROR', 'OAuth device token response is invalid'); }
-    if (token?.error === 'authorization_pending') continue;
-    if (token?.error === 'slow_down') { intervalMs += 5000; continue; }
-    if (token?.error === 'access_denied') throw error('DENIED', 'OAuth device authorization was denied');
-    if (token?.error === 'expired_token') throw error('RECONNECT', 'OAuth device code expired; start authorization again');
-    if (!response.ok || !token || typeof token.access_token !== 'string' || !token.access_token || token.error) throw error('OAUTH_ERROR', 'OAuth device token exchange failed');
-    if (token.refresh_token !== undefined && (typeof token.refresh_token !== 'string' || !token.refresh_token)) throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-    if (token.token_type !== undefined && typeof token.token_type !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-    if (token.scope !== undefined && typeof token.scope !== 'string') throw error('OAUTH_ERROR', 'Invalid OAuth token response');
-    let expiresAt = null;
-    if (token.expires_in !== undefined) {
-      const seconds = Number(token.expires_in);
-      const date = new Date(Date.now() + seconds * 1000);
-      if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(date.getTime())) throw error('OAUTH_ERROR', 'Invalid OAuth expiry');
-      expiresAt = date.toISOString();
+  try {
+    while (true) {
+      await lifetime.sleep(intervalMs);
+      lifetime.check();
+      let response, token;
+      try {
+        response = await lifetime.race(fetch(tokenUrl, {
+          method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: deviceCode, client_id: cfg['client-id'] }),
+          redirect: 'error', signal: lifetime.signal,
+        }));
+        token = await lifetime.race(response.json());
+      } catch (err) { lifetime.check(); throw error('OAUTH_ERROR', 'OAuth device token request or response failed'); }
+      lifetime.check();
+      if (token?.error === 'authorization_pending') continue;
+      if (token?.error === 'slow_down') { intervalMs += 5000; if (!Number.isSafeInteger(intervalMs)) throw error('OAUTH_ERROR', 'Invalid OAuth interval'); continue; }
+      if (token?.error === 'access_denied') throw error('DENIED', 'OAuth device authorization was denied');
+      if (token?.error === 'expired_token') throw error('RECONNECT', 'OAuth device code expired; start authorization again');
+      if (!response.ok) throw error('OAUTH_ERROR', 'OAuth device token exchange failed');
+      const result = tokenResult(token, cfg);
+      lifetime.check();
+      return save(service, cfg, result, false, lifetime.check);
     }
-    return save(service, cfg, { token, expiresAt }, false);
-  }
-  throw error('EXPIRED', 'OAuth device authorization expired');
+  } finally { lifetime.close(); }
 }
 
 // Silent helper for HTTP connector integration: stores fresh tokens, returns metadata only.
@@ -215,6 +191,7 @@ export async function refresh(service) {
   const cfg = config(service, {}, false);
   const refreshToken = getCred(service, 'oauth_refresh_token');
   if (!refreshToken) throw error('RECONNECT', 'No refresh token; run oauth authorize again');
+  checkRefresh(service, cfg);
   const signal = AbortSignal.timeout(30000);
   try { return save(service, cfg, await exchange(cfg, { grant_type: 'refresh_token', refresh_token: refreshToken }, signal), true); }
   catch (err) {
@@ -225,6 +202,7 @@ export async function refresh(service) {
 }
 
 async function authorize(service, options, hooks) {
+  refuseLegacyWrite(service);
   const cfg = config(service, options, true);
   const state = randomBytes(32).toString('base64url');
   const verifier = randomBytes(32).toString('base64url');
@@ -241,21 +219,22 @@ async function authorize(service, options, hooks) {
   let redirectUri;
   function receive(raw, response) {
     if (received) { response?.writeHead(409).end('Callback already received'); return; }
+    let parsed;
+    try { parsed = callbackParameters(raw, redirectUri, state); }
+    catch {
+      response?.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end('Invalid OAuth callback');
+      return;
+    }
     received = true;
     browser = response;
-    try {
-      const url = new URL(raw);
-      const expected = new URL(redirectUri);
-      if (url.origin !== expected.origin || url.pathname !== '/callback' || url.searchParams.getAll('state').length !== 1 || url.searchParams.get('state') !== state) throw error('OAUTH_ERROR', 'OAuth callback state or redirect mismatch');
-      if (url.searchParams.has('error')) throw error('OAUTH_ERROR', 'OAuth authorization was denied');
-      const code = url.searchParams.get('code');
-      if (!code || url.searchParams.getAll('code').length !== 1) throw error('OAUTH_ERROR', 'OAuth callback is missing a valid code');
-      accept(code);
-    } catch (err) { reject(err instanceof OAuthError ? err : error('OAUTH_ERROR', 'Invalid OAuth redirect URL')); }
+    if (parsed.denied) reject(error('OAUTH_ERROR', 'OAuth authorization was denied'));
+    else accept(parsed.code);
   }
+
   try {
     server = createServer((req, res) => {
       if (req.method !== 'GET' || !req.url?.startsWith('/callback?')) { res.writeHead(404).end('Not found'); return; }
+      if (req.headers.host !== new URL(redirectUri).host) { res.writeHead(400).end('Invalid OAuth callback'); return; }
       receive(new URL(req.url, redirectUri).href, res);
     });
     await new Promise((resolve, fail) => {
@@ -276,7 +255,7 @@ async function authorize(service, options, hooks) {
     }
     if (options.manual) {
       reader = createInterface({ input: hooks.stdin || process.stdin, terminal: false });
-      reader.once('line', line => receive(line.trim()));
+      reader.on('line', line => receive(line));
       reader.once('close', () => { if (!received) reject(error('OAUTH_ERROR', 'No redirect URL supplied on stdin')); });
       reader.on('error', () => reject(error('OAUTH_ERROR', 'Could not read redirect URL')));
     }
@@ -299,7 +278,7 @@ async function authorize(service, options, hooks) {
     if (!options['no-pkce']) params.code_verifier = verifier;
     const result = save(service, cfg, await exchange(cfg, params, controller.signal), false);
     if (browser) {
-      browser.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      browser.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Referrer-Policy': 'no-referrer' });
       await new Promise(resolve => browser.end('<!doctype html><title>Authorized</title><p>You can close this tab.</p>', resolve));
     }
     return result;
@@ -326,6 +305,6 @@ export async function run(args, hooks = {}) {
     emit(ok(result));
     return 0;
   } catch (err) {
-    return err instanceof OAuthError ? emitFail(err.code, err.message) : emitFail('OAUTH_ERROR', 'OAuth operation failed');
+    return err instanceof OAuthError || ['EXPIRED', 'USAGE', 'CREDENTIAL_POLICY', 'STORE_SECURITY', 'OAUTH_ERROR'].includes(err.code) ? emitFail(err.code, err.message) : emitFail('OAUTH_ERROR', 'OAuth operation failed');
   }
 }

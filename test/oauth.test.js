@@ -124,7 +124,7 @@ test('complete authorization validates PKCE, stores tokens/config, and emits onl
 test('state mismatch fails without token exchange', async t => {
   const result = await authorize(t, 'bad-state', { misbehave: 'bad-state' });
   assert.equal(result.code, 1);
-  assert.equal(result.envelope.error.code, 'OAUTH_ERROR');
+  assert.equal(result.envelope.error.code, 'TIMEOUT');
   assert.equal(result.mock.idp.log.filter(entry => entry.path === '/token').length, 0);
   assert.equal(getCred('bad-state', 'oauth_access_token'), null);
 });
