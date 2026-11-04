@@ -3,9 +3,11 @@
 // prints one, for piping into other commands.
 
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
+import { secureStorePath } from './store-path.js';
+import { securityError } from './oauth-security.js';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 export function dbPath() {
   if (process.env.LMCONN_DB) return process.env.LMCONN_DB;
@@ -21,30 +23,43 @@ export function dbPath() {
 // undeletable (EBUSY in test teardown). closeDb() exists for that teardown.
 const cache = new Map();
 
-export function openDb(path = dbPath()) {
-  const cached = cache.get(path);
-  if (cached) return cached;
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const db = new DatabaseSync(path);
-  db.exec(`CREATE TABLE IF NOT EXISTS creds (
-    service TEXT NOT NULL,
-    field TEXT NOT NULL,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (service, field)
-  )`);
-  // chmod maps to the read-only attribute on Windows, which then blocks
-  // deletion; ACLs already keep the file user-private there.
-  if (process.platform !== 'win32') {
-    try { chmodSync(path, 0o600); } catch { /* best effort */ }
+function refuseWindowsProtected(db) {
+  if (process.platform !== 'win32') return;
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='credential_policy'").get();
+  if (table && db.prepare('SELECT document FROM credential_policy').all().some(row => JSON.parse(row.document).noReveal)) {
+    throw securityError('Protected credential stores require native Windows ACL support', 'STORE_SECURITY');
   }
-  cache.set(path, db);
-  return db;
+}
+
+export function openDb(path = dbPath()) {
+  if (process.env.LMCONN_STORE_MODE && !['legacy', 'broker'].includes(process.env.LMCONN_STORE_MODE)) throw securityError('Unknown credential store mode');
+  const secured = secureStorePath(path, process.env.LMCONN_STORE_MODE === 'broker');
+  const cached = cache.get(path);
+  if (cached) {
+    if (cached.identity.dev !== secured.identity.dev || cached.identity.ino !== secured.identity.ino) throw new Error('Credential store identity changed');
+    refuseWindowsProtected(cached.db);
+    return cached.db;
+  }
+  const db = new DatabaseSync(secured.file);
+  try {
+    refuseWindowsProtected(db);
+    const st = lstatSync(secured.file);
+    if (st.dev !== secured.identity.dev || st.ino !== secured.identity.ino) throw new Error('Credential store identity changed');
+    db.exec(`PRAGMA secure_delete=ON;
+      PRAGMA journal_mode=DELETE;
+      CREATE TABLE IF NOT EXISTS creds (
+        service TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY (service, field)
+      );
+      CREATE TABLE IF NOT EXISTS credential_policy (service TEXT PRIMARY KEY, document TEXT NOT NULL);`);
+    cache.set(path, { db, identity: secured.identity });
+    return db;
+  } catch (err) { db.close(); throw err; }
 }
 
 export function closeDb(path = dbPath()) {
   const db = cache.get(path);
-  if (db) { db.close(); cache.delete(path); }
+  if (db) { db.db.close(); cache.delete(path); }
 }
 
 export function setCred(service, field, value, db = openDb()) {
