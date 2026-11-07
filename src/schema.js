@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 // JSON import attribute so the version survives bun --compile (no ../package.json in a binary).
 import pkg from '../package.json' with { type: 'json' };
 
-export const AREAS = ['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'acp'];
+export const AREAS = ['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'acp', 'mcp'];
 
 // Allowed param keys per @lmctl-ai/lmts/publish (anything else is a validation error).
 const PARAM_KEYS = ['name', 'type', 'occurs', 'default', 'enum', 'positional', 'items', 'description', 'aliases', 'cliOnly', 'docOnly', 'derived'];
@@ -74,6 +74,7 @@ export const AREA_LOADERS = {
   github: () => import('./cmd-github.js'),
   valkey: () => import('./cmd-valkey.js'),
   acp: () => import('./cmd-acp.js'),
+  mcp: () => import('./cmd-mcp.js'),
 };
 
 // Loads every area's ops. A missing module (not implemented yet) is skipped

@@ -80,6 +80,9 @@ check('llm providers lists 7', r.status === 0 && Array.isArray(r.envelope?.resul
 r = run(['acp', 'chat']);
 check('acp chat without a command exits 2 with USAGE', r.status === 2 && r.envelope?.error?.code === 'USAGE', `status=${r.status}`);
 
+r = run(['mcp', 'tools']);
+check('mcp tools without a command exits 2 with USAGE', r.status === 2 && r.envelope?.error?.code === 'USAGE', `status=${r.status}`);
+
 r = run(['oauth', 'status', 'not-a-service']);
 // status is read-only: an unknown service is a clean envelope, either ok:true with authorized:false
 // (pinned design) or ok:false with an error code and a nonzero exit; never a crash, never a token.

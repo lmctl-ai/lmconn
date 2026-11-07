@@ -28,6 +28,7 @@ store uses `node:sqlite`. Tests use `node --test`.
   lmscript's `--input-json` bridge cannot reach them.
 
 - `src/cmd-acp.js` / `src/acp.js`: ACP (Agent Client Protocol) stdio client; see `docs/acp.md`.
+- `src/cmd-mcp.js` / `src/mcp.js`: MCP stdio client; both share `src/rpc-stdio.js`. See `docs/mcp.md`.
 
 ## Ownership (initial wave)
 

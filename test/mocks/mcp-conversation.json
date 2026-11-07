@@ -1,0 +1,10 @@
+{
+  "session": "mcp-conversation-1",
+  "cells": [
+    { "alias": "Tools", "turn": 1, "expect": "berlin", "text": "Berlin: 12C, cloudy" },
+    { "alias": "Tools", "turn": 2, "expect": "tokyo", "text": "Tokyo: 21C, clear" },
+    { "alias": "Tools", "turn": 3, "expect": "paris", "text": "Paris: 16C, rain" },
+    { "alias": "Tools", "turn": 4, "expect": "oslo", "error": "no data for oslo" },
+    { "alias": "Short", "turn": 1, "text": "only one" }
+  ]
+}

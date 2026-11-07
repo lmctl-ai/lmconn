@@ -766,6 +766,264 @@
           "description": "Select the first allow option when the agent asks permission (default: cancel)"
         }
       ]
+    },
+    {
+      "name": "mcp_tools",
+      "access": "read",
+      "description": "List the tools of a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        }
+      ]
+    },
+    {
+      "name": "mcp_resources",
+      "access": "read",
+      "description": "List the resources of a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        }
+      ]
+    },
+    {
+      "name": "mcp_prompts",
+      "access": "read",
+      "description": "List the prompts of a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        }
+      ]
+    },
+    {
+      "name": "mcp_read",
+      "access": "read",
+      "description": "Read a resource from a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        },
+        {
+          "name": "uri",
+          "type": "string",
+          "description": "Resource URI"
+        }
+      ]
+    },
+    {
+      "name": "mcp_prompt",
+      "access": "read",
+      "description": "Get a prompt from a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Prompt name"
+        },
+        {
+          "name": "arguments",
+          "type": "string",
+          "occurs": "?",
+          "description": "Prompt arguments as a JSON object"
+        }
+      ]
+    },
+    {
+      "name": "mcp_call",
+      "access": "write",
+      "description": "Call one tool on a stdio MCP server",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        },
+        {
+          "name": "tool",
+          "type": "string",
+          "description": "Tool name"
+        },
+        {
+          "name": "arguments",
+          "type": "string",
+          "occurs": "?",
+          "description": "Tool arguments as a JSON object"
+        }
+      ]
+    },
+    {
+      "name": "mcp_session",
+      "access": "write",
+      "description": "Call several tools in order within one MCP session",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "MCP server executable to spawn (stdio)"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the server executable (repeatable)"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the server"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        },
+        {
+          "name": "call",
+          "type": "array",
+          "occurs": "+",
+          "items": "string",
+          "description": "JSON {\"name\":...,\"arguments\":{...}} per call (repeatable)"
+        }
+      ]
     }
   ],
   "globals": [
