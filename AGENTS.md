@@ -27,6 +27,8 @@ store uses `node:sqlite`. Tests use `node --test`.
   arrive as positional CLI arguments must say `positional: true`, or
   lmscript's `--input-json` bridge cannot reach them.
 
+- `src/cmd-acp.js` / `src/acp.js`: ACP (Agent Client Protocol) stdio client; see `docs/acp.md`.
+
 ## Ownership (initial wave)
 
 | Who | Files |

@@ -1,0 +1,42 @@
+{
+  "session": "acp-conversation-1",
+  "cells": [
+    {
+      "alias": "Chat",
+      "turn": 1,
+      "expect": "Hello",
+      "text": "Hi there! I am the mock ACP agent.",
+      "chunks": ["Hi there! ", "I am the mock ACP agent."]
+    },
+    {
+      "alias": "Chat",
+      "turn": 2,
+      "expect": "weather",
+      "text": "It is sunny in the fixture world."
+    },
+    {
+      "alias": "Chat",
+      "turn": 3,
+      "expect": "bye",
+      "text": "Goodbye!",
+      "chunks": ["Goodbye", "!"],
+      "stopReason": "end_turn"
+    },
+    {
+      "alias": "Truncated",
+      "turn": 1,
+      "text": "partial answer",
+      "stopReason": "max_tokens"
+    },
+    {
+      "alias": "Failing",
+      "turn": 1,
+      "text": "fine"
+    },
+    {
+      "alias": "Failing",
+      "turn": 2,
+      "error": "scripted agent failure"
+    }
+  ]
+}

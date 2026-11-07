@@ -715,6 +715,57 @@
           "description": "Timeout in milliseconds"
         }
       ]
+    },
+    {
+      "name": "acp_chat",
+      "access": "write",
+      "description": "Run a multi-turn conversation with an ACP (Agent Client Protocol) agent over stdio",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "Agent executable to spawn"
+        },
+        {
+          "name": "arg",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "Argument for the agent executable (repeatable)"
+        },
+        {
+          "name": "prompt",
+          "type": "array",
+          "occurs": "*",
+          "items": "string",
+          "description": "User turn, in order (repeatable)"
+        },
+        {
+          "name": "promptsFile",
+          "type": "string",
+          "occurs": "?",
+          "description": "JSON array of user turns, sent before any --prompt"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "occurs": "?",
+          "description": "Working directory for the agent and the session"
+        },
+        {
+          "name": "timeoutMs",
+          "type": "number",
+          "occurs": "?",
+          "default": 30000,
+          "description": "Per-request timeout"
+        },
+        {
+          "name": "autoApprove",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Select the first allow option when the agent asks permission (default: cancel)"
+        }
+      ]
     }
   ],
   "globals": [
