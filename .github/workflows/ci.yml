@@ -26,7 +26,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          npm install -g @lmctl-ai/lmctl
+          # Pinned: the pinned lmmock release compiles `exec --script` fixtures by shelling out to
+          # `lmscript --no-preflight`. lmscript 0.2.449+ no longer compiles these fixtures and 0.2.452+
+          # dropped the flag, which failed all 69 mock-backed tests. 0.2.444-0.2.448 work; bump this and
+          # the lmmock pin together (see docs/lmmock-coverage.md).
+          npm install -g @lmctl-ai/lmctl@0.2.448
           case "$RUNNER_OS/$RUNNER_ARCH" in
             Linux/X64) asset=lmmock-linux-x64 ;;
             macOS/ARM64) asset=lmmock-macos-arm64 ;;
