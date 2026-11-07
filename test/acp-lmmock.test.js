@@ -11,7 +11,10 @@ import { converse } from '../src/acp.js';
 const bin = process.env.LMMOCK_BIN || 'lmmock';
 const scenario = fileURLToPath(new URL('./mocks/acp-conversation.json', import.meta.url));
 const probe = spawnSync(bin, ['stdio', '--schema'], { encoding: 'utf8' });
-const skip = probe.error || probe.status !== 0 ? `lmmock with "stdio acp" not available (${bin})` : false;
+// LMCONN_REQUIRE_LMMOCK=1 (set in CI) turns a missing lmmock into a failure instead of a skip.
+const missing = probe.error || probe.status !== 0;
+if (missing && process.env.LMCONN_REQUIRE_LMMOCK) throw new Error(`lmmock with "stdio acp" is required but not available (${bin})`);
+const skip = missing ? `lmmock with "stdio acp" not available (${bin})` : false;
 const mock = alias => ({ command: bin, args: ['stdio', 'acp', '--scenario', scenario, '--alias', alias], timeoutMs: 10000 });
 
 test('three-turn conversation against lmmock stdio acp', { skip }, async () => {

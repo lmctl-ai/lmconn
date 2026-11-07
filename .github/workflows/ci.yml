@@ -49,8 +49,35 @@ jobs:
           echo "$RUNNER_TEMP/lmmock" >> "$GITHUB_PATH"
       - run: lmscript --no-preflight test.lms
 
+  acp-mcp-integration:
+    # The pinned release above predates `lmmock stdio`, so the ACP/MCP integration
+    # tests would skip there. Build lmmock from source and make a skip a failure.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: actions/checkout@v4
+        with:
+          repository: lmctl-ai/lmmock
+          ref: main
+          path: lmmock-src
+          token: ${{ github.token }}
+      - name: Build lmmock
+        run: go build -o "$RUNNER_TEMP/lmmock" ./cmd/lmmock
+        working-directory: lmmock-src
+      - name: ACP and MCP integration tests against lmmock stdio
+        env:
+          LMMOCK_BIN: ${{ runner.temp }}/lmmock
+          LMCONN_REQUIRE_LMMOCK: '1'
+        run: node --test test/acp-lmmock.test.js test/mcp-lmmock.test.js
+
   build:
-    needs: test
+    needs: [test, acp-mcp-integration]
     strategy:
       fail-fast: false
       matrix:

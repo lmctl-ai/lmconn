@@ -10,7 +10,10 @@ import { withMcp } from '../src/mcp.js';
 const bin = process.env.LMMOCK_BIN || 'lmmock';
 const scenario = fileURLToPath(new URL('./mocks/mcp-conversation.json', import.meta.url));
 const probe = spawnSync(bin, ['stdio', '--schema'], { encoding: 'utf8' });
-const skip = probe.error || probe.status !== 0 ? `lmmock with "stdio mcp" not available (${bin})` : false;
+// LMCONN_REQUIRE_LMMOCK=1 (set in CI) turns a missing lmmock into a failure instead of a skip.
+const missing = probe.error || probe.status !== 0;
+if (missing && process.env.LMCONN_REQUIRE_LMMOCK) throw new Error(`lmmock with "stdio mcp" is required but not available (${bin})`);
+const skip = missing ? `lmmock with "stdio mcp" not available (${bin})` : false;
 const mockArgs = alias => ['stdio', 'mcp', '--scenario', scenario, '--alias', alias];
 const mock = alias => ({ command: bin, args: mockArgs(alias), timeoutMs: 10000 });
 
