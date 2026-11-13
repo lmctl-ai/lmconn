@@ -23,7 +23,21 @@ const refuse = (message) => Object.assign(new Error(message), { code: 'NPM_REFUS
 
 export const LIMITS = { compressed: 50 * 1024 * 1024, expanded: 200 * 1024 * 1024, entries: 10000, ratio: 200, manifest: 1024 * 1024, output: 65536 };
 const REGISTRY = 'https://registry.npmjs.org';
-const registry = () => (process.env.LMCONN_NPM_TEST_REGISTRY || REGISTRY).replace(/\/+$/, '');
+// Test overrides are honoured only with LMCONN_NPM_TEST=1 and only for a literal loopback registry; otherwise the
+// registry is the constant and npm is the one installed beside the node running lmconn (never found through the caller's PATH).
+const testMode = () => process.env.LMCONN_NPM_TEST === '1';
+const registry = () => {
+  const t = process.env.LMCONN_NPM_TEST_REGISTRY;
+  if (testMode() && t && /^http:\/\/127\.0\.0\.1:\d+$/.test(t)) return t;
+  return REGISTRY;
+};
+const nodeDir = () => path.dirname(process.execPath);
+function npmBin() {
+  if (testMode() && process.env.LMCONN_NPM_BIN) return process.env.LMCONN_NPM_BIN;
+  const pinned = path.join(os.homedir(), '.lmconn', 'npm', 'bin', 'npm');
+  if (fs.existsSync(pinned)) { const st = fs.statSync(pinned); if (st.uid === process.getuid() && !(st.mode & 0o022)) return pinned; }
+  return path.join(nodeDir(), 'npm');
+}
 
 export const ops = [
   { name: 'npm_pack', access: 'write', description: 'Pack a package directory with npm (scripts off, no credential) and print its sha512', params: [
@@ -99,10 +113,10 @@ function paxPath(data) {
   let path = null; let at = 0;
   while (at < data.length) {
     const sp = data.indexOf(0x20, at); if (sp < 0) throw refuse('malformed pax header');
-    const len = Number(data.subarray(at, sp).toString()); if (!Number.isSafeInteger(len) || len < 1 || at + len > data.length) throw refuse('malformed pax header');
-    const rec = data.subarray(sp + 1, at + len - 1).toString('utf8'); const eq = rec.indexOf('=');
+    const len = Number(data.subarray(at, sp).toString()); if (!Number.isSafeInteger(len) || len <= sp - at + 1 || at + len > data.length || data[at + len - 1] !== 0x0a) throw refuse('malformed pax header');
+    const rec = data.subarray(sp + 1, at + len - 1).toString('utf8'); const eq = rec.indexOf('='); if (eq < 1) throw refuse('malformed pax header');
     const key = rec.slice(0, eq), val = rec.slice(eq + 1);
-    if (key === 'path') path = val;
+    if (key === 'path') { if (!val) throw refuse('empty pax path'); path = val; }
     else if (['linkpath', 'size', 'uid', 'gid', 'mtime', 'atime', 'ctime', 'uname', 'gname', 'comment'].includes(key) || key.startsWith('SCHILY.') || key.startsWith('LIBARCHIVE.')) { if (key === 'size' || key === 'linkpath') throw refuse('unsupported pax header'); }
     else throw refuse('unsupported pax header');
     at += len;
@@ -115,10 +129,14 @@ export function readPackage(gz) {
   let raw;
   try { raw = zlib.gunzipSync(gz, { maxOutputLength: LIMITS.expanded }); } catch { throw refuse('not a gzip tarball or it expands beyond the limit'); }
   if (raw.length / Math.max(gz.length, 1) > LIMITS.ratio && raw.length > 1024 * 1024) throw refuse('tarball compression ratio too high');
-  const seen = new Set(); const files = new Map(); let at = 0; let longName = null; let paxName = null; let total = 0; let count = 0;
+  const seen = new Set(); const dirs = new Set(); const filesSeen = new Set(); let ended = false; const files = new Map(); let at = 0; let longName = null; let paxName = null; let total = 0; let count = 0;
   while (at + 512 <= raw.length) {
     const h = raw.subarray(at, at + 512);
-    if (h.every(b => b === 0)) break;
+    if (h.every(b => b === 0)) {
+      // node-tar ends only at two zero blocks; nothing but zeros may follow, or a hidden entry could be read by npm.
+      if (at + 1024 > raw.length || !raw.subarray(at).every(b => b === 0)) throw refuse('malformed tar end marker');
+      ended = true; break;
+    }
     let sum = 0; for (let k = 0; k < 512; k++) sum += (k >= 148 && k < 156) ? 32 : h[k];
     if (octal(h, 148, 8) !== sum) throw refuse('bad tar checksum');
     const size = octal(h, 124, 12), type = String.fromCharCode(h[156] || 48);
@@ -129,17 +147,25 @@ export function readPackage(gz) {
     if (type === 'L') { if (longName !== null) throw refuse('stacked long names'); longName = field(body, 0, body.length); continue; }
     if (!['0', '5'].includes(type)) throw refuse('tar entry is not a plain file or directory');
     if (++count > LIMITS.entries) throw refuse('too many tar entries');
+    const ustar = h.subarray(257, 265).equals(Buffer.from('ustar\x0000', 'latin1'));
     const prefix = field(h, 345, 155);
+    if (prefix && !ustar) throw refuse('tar prefix field without ustar magic');
     let name = paxName || longName || (prefix ? `${prefix}/${field(h, 0, 100)}` : field(h, 0, 100));
     paxName = null; longName = null;
-    if (type === '5') { const dir = normalizeEntry(name.replace(/\/+$/, '')); if (seen.has(dir)) throw refuse('duplicate tar path'); seen.add(dir); continue; }
+    if (type === '5') { const dir = normalizeEntry(name.replace(/\/+$/, '')); if (seen.has(dir)) throw refuse('duplicate tar path'); seen.add(dir); dirs.add(dir); continue; }
+    if (name.endsWith('/')) throw refuse('a file entry name ends with a slash');
     const norm = normalizeEntry(name);
     if (norm === 'package' || seen.has(norm)) throw refuse('duplicate tar path');
-    seen.add(norm); total += size;
+    seen.add(norm); filesSeen.add(norm); total += size;
     if (total > LIMITS.expanded) throw refuse('tarball expands beyond the limit');
     if (norm === 'package/package.json') { if (size > LIMITS.manifest) throw refuse('manifest too large'); files.set(norm, Buffer.from(body)); }
   }
   if (paxName !== null || longName !== null) throw refuse('dangling tar extension header');
+  if (!ended) throw refuse('tar has no end marker');
+  for (const f of filesSeen) {
+    if (dirs.has(f)) throw refuse('a path is both a file and a directory');
+    for (let i = f.lastIndexOf('/'); i > 0; i = f.lastIndexOf('/', i - 1)) if (filesSeen.has(f.slice(0, i))) throw refuse('a path is both a file and a directory');
+  }
   const manifestBytes = files.get('package/package.json');
   if (!manifestBytes) throw refuse('package/package.json missing');
   let manifest;
@@ -160,7 +186,7 @@ export function checkManifest(manifest, tag) {
     for (const k of Object.keys(pc)) if (!['access', 'tag', 'provenance'].includes(k)) throw refuse(`publishConfig.${k} is refused`);
     if (pc.tag !== undefined && pc.tag !== tag) throw refuse('publishConfig.tag must equal --tag');
   }
-  if (PRERELEASE.test(version) && !tag) throw refuse('a prerelease version needs an explicit --tag');
+  if (PRERELEASE.test(version) && (!tag || tag === 'latest')) throw refuse('a prerelease version needs an explicit --tag other than latest');
   return { name, version };
 }
 
@@ -176,9 +202,12 @@ function runRoot() {
   return root;
 }
 
+const active = { dirs: new Set(), pids: new Set() };
 function scratch() {
   const dir = path.join(runRoot(), randomBytes(12).toString('hex'));
   fs.mkdirSync(dir, { mode: 0o700 });
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"private":true}\n', { mode: 0o600 });  // stops npm's walk up to an ancestor project
+  active.dirs.add(dir);
   return dir;
 }
 
@@ -193,27 +222,28 @@ function writeConfig(dir, withToken) {
   return { user, glob };
 }
 
-export function runNpm(args, { cwd, token, timeoutMs = 120000, dir }) {
+export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir }) {
   const { user, glob } = writeConfig(dir, !!token);
-  const env = { PATH: process.env.PATH || '/usr/bin:/bin', HOME: dir, NO_COLOR: '1' };
+  const env = { PATH: `${nodeDir()}:/usr/bin:/bin`, HOME: dir, NO_COLOR: '1' };
   if (token) env.LMCONN_NPM_TOKEN = token;
-  const bin = process.env.LMCONN_NPM_BIN || 'npm';
-  const full = [...args, '--userconfig', user, '--globalconfig', glob, '--registry', `${registry()}/`, '--ignore-scripts', '--no-update-notifier', '--no-audit', '--no-fund', '--workspaces=false'];
+  const bin = npmBin();
+  const full = [...args, '--userconfig', user, '--globalconfig', glob, '--registry', `${registry()}/`, '--ignore-scripts', '--no-update-notifier', '--no-audit', '--no-fund', '--workspaces=false', '--prefix', prefix];
   return new Promise((resolve) => {
     const child = spawn(bin, full, { cwd, env, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '', timedOut = false, over = false;
-    const cap = (s, d) => (s.length + d.length > LIMITS.output ? (over = true, s) : s + d);
+    const cap = (s, d) => (s.length + d.length > LIMITS.output ? (over = true, kill(), s) : s + d);
     child.stdout.on('data', d => { out = cap(out, d.toString()); });
     child.stderr.on('data', d => { err = cap(err, d.toString()); });
     const kill = () => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } };
+    active.pids.add(child.pid);
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
     child.on('error', () => { clearTimeout(timer); resolve({ code: 127, out, err, timedOut, over }); });
-    child.on('close', (code) => { clearTimeout(timer); kill(); resolve({ code, out, err, timedOut, over }); });
+    child.on('close', (code) => { clearTimeout(timer); kill(); active.pids.delete(child.pid); resolve({ code, out, err, timedOut, over }); });
   });
 }
 
 const sha512 = (buf) => 'sha512-' + createHash('sha512').update(buf).digest('base64');
-const cleanup = (dir) => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } };
+const cleanup = (dir) => { active.dirs.delete(dir); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } };
 
 function tokenFor(handle) {
   authorizeOrigin(handle, registry());
@@ -233,7 +263,7 @@ export async function pack(dirArg, out) {
     const work = path.join(dir, 'src'); fs.mkdirSync(work, { mode: 0o700 });
     fs.cpSync(src, work, { recursive: true, filter: (p) => !['.git', 'node_modules'].includes(path.basename(p)) });
     const dest = path.join(dir, 'out'); fs.mkdirSync(dest, { mode: 0o700 });
-    const r = await runNpm(['pack', '--pack-destination', dest, '--json'], { cwd: work, dir });
+    const r = await runNpm(['pack', '--pack-destination', dest, '--json'], { cwd: work, dir, prefix: work });
     if (r.code !== 0) throw Object.assign(new Error('npm pack failed'), { code: 'NPM_FAILED' });
     const names = fs.readdirSync(dest).filter(n => n.endsWith('.tgz'));
     if (names.length !== 1) throw Object.assign(new Error('npm pack produced no single tarball'), { code: 'NPM_FAILED' });
@@ -272,15 +302,14 @@ export async function publish({ file, credential, expectIntegrity, tag, access }
     const r = await runNpm(args, { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 180000 });
     const receipt = { package: name, version, integrity: local };
     const spec = `${name}@${version}`;
-    const check = async () => remoteIntegrity(spec, { token, dir });
+    const check = async () => { try { return await remoteIntegrity(spec, { token, dir }); } catch { return null; } };
     const text = r.err + r.out;
     let seen = await check();
-    if (seen === local) return { outcome: 'published_confirmed', ...receipt, registryIntegrity: seen };
+    if (seen === local) return { outcome: 'published_confirmed', ...receipt, registryIntegrity: seen, submitted: r.code === 0 };
     if (seen && seen !== 'absent') return { outcome: 'conflict', ...receipt, registryIntegrity: seen };
     // Failures known to precede submission or a definitive rejection.
-    if (r.code !== 0 && !r.timedOut && !r.over && /\b(ENEEDAUTH|E401|E403|E400|E422|EUSAGE|EINVALIDTAGNAME|EBADENGINE)\b/.test(text) && seen === 'absent') {
-      return { outcome: 'not_published', ...receipt, reason: safeText(text.match(/\b(ENEEDAUTH|E401|E403|E400|E422|EUSAGE|EINVALIDTAGNAME|EBADENGINE)\b/)[1], secrets) };
-    }
+    const code = /^npm error code (ENEEDAUTH|E401|E403|EUSAGE|EINVALIDTAGNAME|EBADENGINE)$/m.exec(r.err)?.[1];
+    if (r.code !== 0 && !r.timedOut && !r.over && code && seen === 'absent') return { outcome: 'not_published', ...receipt, reason: code };
     // The PUT may have been sent: reconcile for a window, then stay pending.
     const until = Date.now() + (Number(process.env.LMCONN_NPM_RECONCILE_MS) || 60000);
     while (Date.now() < until) {
@@ -326,7 +355,16 @@ export function parseArgs(args) {
   return req;
 }
 
+function installSignals() {
+  for (const sig of ['SIGINT', 'SIGTERM']) process.once(sig, () => {
+    for (const pid of active.pids) { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }
+    for (const d of active.dirs) cleanup(d);
+    process.exit(130);
+  });
+}
+
 export async function run(args) {
+  installSignals();
   try {
     const req = parseArgs(args);
     let result;

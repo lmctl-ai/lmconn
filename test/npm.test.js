@@ -43,6 +43,13 @@ test('tar reader accepts a normal package and rejects hostile layouts', () => {
     'hardlink': tgz(m, entry('package/l', '', '1')),
     'device': tgz(m, entry('package/d', '', '3')),
     'pax path': tgz(m, entry('PaxHeader', '30 path=other/package.json\n'.replace('30', '28'), 'x'), entry('package/y', 'x')),
+    'hidden entry after a single zero block': zlib.gzipSync(Buffer.concat([m, Buffer.alloc(512), entry('package/package.json', manifest({ publishConfig: { registry: 'http://evil' } })), Buffer.alloc(1024)])),
+    'bytes after the end marker': zlib.gzipSync(Buffer.concat([m, Buffer.alloc(1024), entry('package/x', 'x')])),
+    'no end marker': zlib.gzipSync(m),
+    'prefix without ustar magic': (() => { const h = entry('package.json', manifest()); h.write('package', 345); h.fill(0, 257, 265); return tgz(h); })(),
+    'file name ending in slash': tgz(m, entry('package/a/', 'x')),
+    'file and directory share a path': tgz(m, entry('package/a', 'x'), entry('package/a/b', 'y')),
+    'pax record with a short length': tgz(m, entry('PaxHeader', '2 path=x\n', 'x'), entry('package/y', 'x')),
     'no manifest': tgz(entry('package/index.js', 'x')),
     'duplicate manifest member': tgz(entry('package/package.json', '{"name":"a","version":"1.0.0","name":"b"}')),
     'not gzip': Buffer.from('hello'),
@@ -66,6 +73,7 @@ test('manifest policy: publishConfig, top-level tag, prerelease needs --tag', ()
     { name: 'a', version: '2.0.0-rc.1' },
     { name: 'A B', version: '1.0.0' }, { name: 'a', version: 'x' }, [],
   ]) assert.throws(() => checkManifest(bad, undefined), /./, JSON.stringify(bad));
+  assert.throws(() => checkManifest({ name: 'a', version: '2.0.0-rc.1' }, 'latest'), /tag/);
   assert.ok(checkManifest({ name: 'a', version: '2.0.0-rc.1', publishConfig: { access: 'public', tag: 'next' } }, 'next'));
 });
 
@@ -96,7 +104,7 @@ function mockRegistry(mode) {
 
 function lmconn(args, { input, env = {} } = {}) {
   return new Promise((resolve) => {
-    const c = spawn(process.execPath, [cli, ...args], { env: { ...process.env, LMCONN_DB: join(dir, 'main.db'), LMCONN_RUN_DIR: join(dir, 'run'), LMCONN_NPM_RECONCILE_MS: '300', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const c = spawn(process.execPath, [cli, ...args], { env: { ...process.env, LMCONN_DB: join(dir, 'main.db'), LMCONN_RUN_DIR: join(dir, 'run'), LMCONN_NPM_RECONCILE_MS: '300', LMCONN_NPM_TEST: '1', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = ''; let err = '';
     c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { err += d; });
     c.on('close', code => { let json = null; try { json = JSON.parse(out); } catch { /* */ } resolve({ code, out, err, json }); });
@@ -186,5 +194,21 @@ test('whoami returns only the user name; unknown flags are refused', async () =>
       const x = await lmconn(['npm', 'publish', 'f.tgz', '--credential', 'w1', '--expect-integrity', 'z', flag, 'v']);
       assert.equal(x.code, 2, flag);
     }
+  } finally { reg.server.close(); }
+});
+
+test('an ancestor project config cannot steer npm; test overrides are ignored without LMCONN_NPM_TEST', async () => {
+  const reg = await mockRegistry('ok');
+  try {
+    assert.equal((await store('anc', reg.url)).code, 0);
+    fs.writeFileSync(join(dir, 'package.json'), '{"name":"ancestor"}'); fs.writeFileSync(join(dir, '.npmrc'), 'registry=http://127.0.0.1:1/\nstrict-ssl=false\nhttps-proxy=http://127.0.0.1:1\n');
+    const { out } = await packDemo('1.0.3');
+    const integrity = sri(fs.readFileSync(out));
+    const r = await lmconn(['npm', 'publish', out, '--credential', 'anc', '--expect-integrity', integrity], { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST_REGISTRY: reg.url } });
+    assert.equal(r.json?.result?.outcome, 'published_confirmed', r.out + r.err);
+    assert.equal(reg.seen.puts, 1);
+    // without the test switch the registry is the constant, which this credential is not bound to
+    const x = await lmconn(['npm', 'whoami', '--credential', 'anc'], { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST: '', LMCONN_NPM_TEST_REGISTRY: reg.url, LMCONN_NPM_BIN: '/bin/true' } });
+    assert.equal(x.json.error.code, 'CREDENTIAL_POLICY');
   } finally { reg.server.close(); }
 });
