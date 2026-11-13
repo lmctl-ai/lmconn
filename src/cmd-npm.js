@@ -16,7 +16,7 @@ import { getCred } from './creds.js';
 import { authorizeOrigin } from './credential-policy.js';
 import { redact } from './oauth-security.js';
 
-const USAGE = 'usage: lmconn npm pack DIR --out FILE | lmconn npm publish FILE --credential HANDLE --expect-integrity sha512-... ' +
+const USAGE = 'usage: lmconn npm trust-list PACKAGE --credential HANDLE | lmconn npm trust-github PACKAGE --credential HANDLE --repo OWNER/REPO --file WORKFLOW.yml [--env E] [--auth-url-file ABS] | lmconn npm pack DIR --out FILE | lmconn npm publish FILE --credential HANDLE --expect-integrity sha512-... ' +
   '[--tag T] [--access public|restricted] | lmconn npm whoami --credential HANDLE';
 const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const refuse = (message) => Object.assign(new Error(message), { code: 'NPM_REFUSED' });
@@ -211,29 +211,41 @@ function scratch() {
   return dir;
 }
 
-function writeConfig(dir, withToken) {
+function writeConfig(dir, withToken, opener) {
   const reg = registry(); const host = reg.replace(/^https?:/, '');
-  const lines = [`registry=${reg}/`, `@lmctl-ai:registry=${reg}/`, 'strict-ssl=true', 'proxy=', 'https-proxy=', 'noproxy=',
+  const lines = [`registry=${reg}/`, `@lmctl-ai:registry=${reg}/`, 'strict-ssl=true',
     `cache=${dir}/cache`, `logs-dir=${dir}/logs`, 'update-notifier=false', 'audit=false', 'fund=false', 'ignore-scripts=true', 'fetch-retries=0'];
   if (withToken) lines.push(`${host}/:_authToken=\${LMCONN_NPM_TOKEN}`);
+  if (opener) {  // npm 'opens the browser' with this script, which only hands the approval link to the human through a file
+    const bin = path.join(dir, 'bin'); fs.mkdirSync(bin, { mode: 0o700 });
+    const script = path.join(bin, 'xdg-open');  // npm opens links with xdg-open on Linux; this one only passes the link on
+    fs.writeFileSync(script, '#!/bin/sh\nif [ -n "$LMCONN_AUTH_URL_FILE" ]; then printf \'%s\\n\' "$1" > "$LMCONN_AUTH_URL_FILE"; fi\nexit 0\n', { mode: 0o700 });
+  }
   const user = path.join(dir, 'userconfig'), glob = path.join(dir, 'globalconfig');
   fs.writeFileSync(user, lines.join('\n') + '\n', { mode: 0o600 });
   fs.writeFileSync(glob, '', { mode: 0o600 });
   return { user, glob };
 }
 
-export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir }) {
-  const { user, glob } = writeConfig(dir, !!token);
-  const env = { PATH: `${nodeDir()}:/usr/bin:/bin`, HOME: dir, NO_COLOR: '1' };
+export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir, onData, envConfig = false, tty = false, authUrlFile }) {
+  const { user, glob } = writeConfig(dir, !!token, tty);
+  const env = { PATH: `${tty ? dir + '/bin:' : ''}${nodeDir()}:/usr/bin:/bin`, HOME: dir, NO_COLOR: '1' };
   if (token) env.LMCONN_NPM_TOKEN = token;
+  // `npm trust` does not accept these as flags (their values are read as positionals), so for it our own config files go in by env.
+  if (tty && authUrlFile) env.LMCONN_AUTH_URL_FILE = authUrlFile;
+  if (envConfig) Object.assign(env, { NPM_CONFIG_USERCONFIG: user, NPM_CONFIG_GLOBALCONFIG: glob, NPM_CONFIG_PREFIX: prefix });
   const bin = npmBin();
-  const full = [...args, '--userconfig', user, '--globalconfig', glob, '--registry', `${registry()}/`, '--ignore-scripts', '--no-update-notifier', '--no-audit', '--no-fund', '--workspaces=false', '--prefix', prefix];
+  const full = [...args, ...(envConfig ? [] : ['--userconfig', user, '--globalconfig', glob]), '--registry', `${registry()}/`, '--ignore-scripts', '--no-update-notifier', '--no-audit', '--no-fund', '--workspaces=false', ...(envConfig ? [] : ['--prefix', prefix])];
   return new Promise((resolve) => {
-    const child = spawn(bin, full, { cwd, env, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    // npm waits for a web-auth approval only on a terminal; python's pty module gives it one (argv passed as-is, no shell).
+    const child = tty ? spawn('/usr/bin/python3', ['-I', '-c', 'import pty,sys;sys.exit(pty.spawn(sys.argv[1:])>>8)', bin, ...full], { cwd, env, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
+      : spawn(bin, full, { cwd, env, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '', timedOut = false, over = false;
     const cap = (s, d) => (s.length + d.length > LIMITS.output ? (over = true, kill(), s) : s + d);
-    child.stdout.on('data', d => { out = cap(out, d.toString()); });
-    child.stderr.on('data', d => { err = cap(err, d.toString()); });
+    let entered = false;  // the terminal prompt 'Press ENTER to open in the browser' is answered once so npm prints the approval link and waits
+    const answer = (t) => { if (tty && !entered && /Press ENTER/i.test(t)) { entered = true; try { child.stdin.write('\n'); } catch { /* gone */ } } };
+    child.stdout.on('data', d => { out = cap(out, d.toString()); onData?.(d.toString()); answer(d.toString()); });
+    child.stderr.on('data', d => { err = cap(err, d.toString()); onData?.(d.toString()); });
     const kill = () => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } };
     active.pids.add(child.pid);
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
@@ -332,11 +344,62 @@ export async function whoami(credential) {
   } finally { cleanup(dir); }
 }
 
+const PKG_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+const AUTH_URL = /https:\/\/www\.npmjs\.com\/auth\/cli\/[0-9A-Za-z-]+/;
+
+// npm's own error lines only (never the token); short, redacted
+const errSummary = (r, token) => r.timedOut ? 'timeout' : safeText((r.err + '\n' + r.out).replace(/\r/g, '').split('\n').filter(l => l.startsWith('npm error')).map(l => l.slice(10).trim()).filter(Boolean).slice(0, 4).join(' | ') || 'error', [token]);
+
+// A web-auth URL printed by npm is a one-time approval link for the human (not a secret); hand it over through a file the caller named.
+function authHook(authUrlFile) {
+  if (authUrlFile === undefined) return undefined;
+  if (!path.isAbsolute(authUrlFile)) throw usage('--auth-url-file must be an absolute path');
+  let announced = false;
+  return (text) => {
+    const m = AUTH_URL.exec(text);
+    if (m && !announced) { announced = true; fs.writeFileSync(authUrlFile, m[0] + '\n', { mode: 0o600 }); }
+  };
+}
+
+export async function trustList(pkg, credential, authUrlFile) {
+  if (!PKG_NAME.test(pkg) || pkg.length > 214) throw usage('package name is invalid');
+  const onData = authHook(authUrlFile);  // validated before the credential is touched
+  const dir = scratch();
+  try {
+    const token = tokenFor(credential);
+    const r = await runNpm(['trust', 'list', pkg, '--json'], { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000, envConfig: true, tty: true, authUrlFile, onData });
+    if (r.code !== 0) throw Object.assign(new Error(`npm trust list failed: ${errSummary(r, token)}`), { code: 'NPM_FAILED' });
+    // On a terminal the output has colour codes, spinners and warnings around the JSON; keep the JSON (or the last clean lines).
+    const text = r.out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\u2800-\u28ff]/g, '').replace(/\r/g, '');
+    const lines = text.split('\n').filter(l => l.trim() && !/^npm (warn|notice)/.test(l));
+    const at = lines.findIndex(l => /^[[{]/.test(l));
+    let parsed = null; try { parsed = JSON.parse((at < 0 ? lines : lines.slice(at)).join('\n')); } catch { /* keep text */ }
+    return { package: pkg, trust: parsed ?? safeText(lines.slice(-6).join(' | '), [token]) };
+  } finally { cleanup(dir); }
+}
+
+export async function trustGithub({ pkg, credential, repo, file, env, authUrlFile }) {
+  if (!PKG_NAME.test(pkg) || pkg.length > 214) throw usage('package name is invalid');
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(repo)) throw usage('--repo must look like owner/repo');
+  if (!/^[A-Za-z0-9._-]{1,100}\.ya?ml$/.test(file)) throw usage('--file must be a workflow file name ending in .yml or .yaml');
+  if (env !== undefined && !/^[A-Za-z0-9._-]{1,100}$/.test(env)) throw usage('--env is invalid');
+  const dir = scratch();
+  try {
+    const onData = authHook(authUrlFile);  // validated before the credential is touched
+    const token = tokenFor(credential);
+    const args = ['trust', 'github', pkg, '--repo', repo, '--file', file, '--allow-publish', '--yes'];
+    if (env) args.push('--env', env);
+    const r = await runNpm(args, { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000, onData, envConfig: true, tty: true, authUrlFile });
+    if (r.code !== 0) return { outcome: 'failed', package: pkg, reason: errSummary(r, token) };
+    return { outcome: 'configured', package: pkg, repo, file, ...(env ? { env } : {}) };
+  } finally { cleanup(dir); }
+}
+
 export function parseArgs(args) {
   const [command, ...rest] = args;
-  if (!['pack', 'publish', 'whoami'].includes(command)) throw usage(USAGE);
+  if (!['pack', 'publish', 'whoami', 'trust-list', 'trust-github'].includes(command)) throw usage(USAGE);
   const req = { command, positional: null, flags: {} };
-  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access'], whoami: ['credential'] }[command];
+  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access'], whoami: ['credential'], 'trust-list': ['credential', 'auth-url-file'], 'trust-github': ['credential', 'repo', 'file', 'env', 'auth-url-file'] }[command];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a.startsWith('--')) {
@@ -345,13 +408,14 @@ export function parseArgs(args) {
       if (i + 1 >= rest.length) throw usage(`missing value for ${a}`);
       if (name in req.flags) throw usage(`${a} given twice`);
       req.flags[name] = rest[++i];
-    } else if (req.positional === null && command !== 'whoami') req.positional = a;
+    } else if (req.positional === null && command !== 'whoami') req.positional = a;  // pack DIR, publish FILE, trust-* PACKAGE
     else throw usage(`unexpected argument: ${a}`);
   }
-  if (command !== 'whoami' && !req.positional) throw usage(USAGE);
+  if (!['whoami'].includes(command) && !req.positional) throw usage(USAGE);
   if (command === 'pack' && !req.flags.out) throw usage('--out is required');
   if (command === 'publish' && (!req.flags.credential || !req.flags['expect-integrity'])) throw usage('--credential and --expect-integrity are required');
-  if (command === 'whoami' && !req.flags.credential) throw usage('--credential is required');
+  if (['whoami', 'trust-list', 'trust-github'].includes(command) && !req.flags.credential) throw usage('--credential is required');
+  if (command === 'trust-github' && (!req.flags.repo || !req.flags.file)) throw usage('--repo and --file are required');
   return req;
 }
 
@@ -370,6 +434,8 @@ export async function run(args) {
     let result;
     if (req.command === 'pack') result = await pack(req.positional, path.resolve(req.flags.out));
     else if (req.command === 'publish') result = await publish({ file: req.positional, credential: req.flags.credential, expectIntegrity: req.flags['expect-integrity'], tag: req.flags.tag, access: req.flags.access });
+    else if (req.command === 'trust-list') result = await trustList(req.positional, req.flags.credential, req.flags['auth-url-file']);
+    else if (req.command === 'trust-github') result = await trustGithub({ pkg: req.positional, credential: req.flags.credential, repo: req.flags.repo, file: req.flags.file, env: req.flags.env, authUrlFile: req.flags['auth-url-file'] });
     else result = await whoami(req.flags.credential);
     emit(ok(result));
     return 0;

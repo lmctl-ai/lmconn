@@ -221,3 +221,39 @@ test('an ancestor project config cannot steer npm; test overrides are ignored wi
     assert.equal(x.json.error.code, 'CREDENTIAL_POLICY');
   } finally { reg.server.close(); }
 });
+
+test('trust operations refuse malformed package, repo, workflow and env before any credential is read', async () => {
+  const base = { env: { LMCONN_STORE_MODE: 'broker' } };
+  const bad = [
+    ['npm', 'trust-github', 'Not A Package', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', 'a.yml'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'no-slash', '--file', 'a.yml'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'a/b;rm', '--file', 'a.yml'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', '../a.yml'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', 'a.txt'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', 'a.yml', '--env', 'a b'],
+    ['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', 'a.yml', '--auth-url-file', 'relative.txt'],
+    ['npm', 'trust-list', '--', '--credential', 'nosuch'],
+    ['npm', 'trust-list', '@lmctl-ai/demo', '--credential', 'nosuch', '--registry', 'https://evil.invalid'],
+  ];
+  for (const args of bad) {
+    const r = await lmconn(args, base);
+    assert.equal(r.json?.error?.code, 'USAGE', args.join(' ') + ' -> ' + r.out);
+  }
+});
+
+test('trust-github passes only validated flags and hands the approval link over through a file', async () => {
+  const reg = await mockRegistry('ok');
+  try {
+    assert.equal((await store('tg', reg.url)).code, 0);
+    const fake = join(dir, 'fake-npm.sh'), argvFile = join(dir, 'argv.txt'), urlFile = join(dir, 'auth.url');
+    fs.writeFileSync(fake, `#!/bin/sh\nprintf '%s\\n' "$@" > ${argvFile}\nprintf '%s\\n' "$LMCONN_NPM_TOKEN" > /dev/null\necho 'Press ENTER to open in the browser...'\nread x\nxdg-open https://www.npmjs.com/auth/cli/00000000-0000-0000-0000-000000000001\nexit 0\n`, { mode: 0o755 });
+    const r = await lmconn(['npm', 'trust-github', '@lmctl-ai/demo', '--credential', 'tg', '--repo', 'lmctl-ai/demo', '--file', 'release.yml', '--auth-url-file', urlFile],
+      { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST_REGISTRY: reg.url, LMCONN_NPM_BIN: fake } });
+    assert.equal(r.json?.result?.outcome, 'configured', r.out + r.err);
+    const argv = fs.readFileSync(argvFile, 'utf8').split('\n');
+    assert.deepEqual(argv.slice(0, 8), ['trust', 'github', '@lmctl-ai/demo', '--repo', 'lmctl-ai/demo', '--file', 'release.yml', '--allow-publish']);
+    assert.ok(!argv.some(a => a.includes(TOKEN)), 'token never in argv');
+    assert.match(fs.readFileSync(urlFile, 'utf8'), /^https:\/\/www\.npmjs\.com\/auth\/cli\/0{8}-/);
+    assert.ok(!r.out.includes(TOKEN));
+  } finally { reg.server.close(); }
+});
