@@ -207,6 +207,15 @@ test('an ancestor project config cannot steer npm; test overrides are ignored wi
     const r = await lmconn(['npm', 'publish', out, '--credential', 'anc', '--expect-integrity', integrity], { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST_REGISTRY: reg.url } });
     assert.equal(r.json?.result?.outcome, 'published_confirmed', r.out + r.err);
     assert.equal(reg.seen.puts, 1);
+    // an ancestor setting that only the config (not our command line) controls: retries must stay 0
+    fs.writeFileSync(join(dir, '.npmrc'), 'fetch-retries=2\nfetch-retry-mintimeout=10\nfetch-retry-maxtimeout=20\n');
+    const bad = await mockRegistry('fail500');
+    try {
+      assert.equal((await store('anc2', bad.url)).code, 0);
+      const rc = await packDemo('1.0.4'); const ig = sri(fs.readFileSync(rc.out));
+      await lmconn(['npm', 'publish', rc.out, '--credential', 'anc2', '--expect-integrity', ig], { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST_REGISTRY: bad.url } });
+      assert.equal(bad.seen.puts, 1, 'ancestor .npmrc must not be read');
+    } finally { bad.server.close(); }
     // without the test switch the registry is the constant, which this credential is not bound to
     const x = await lmconn(['npm', 'whoami', '--credential', 'anc'], { env: { LMCONN_STORE_MODE: 'broker', LMCONN_NPM_TEST: '', LMCONN_NPM_TEST_REGISTRY: reg.url, LMCONN_NPM_BIN: '/bin/true' } });
     assert.equal(x.json.error.code, 'CREDENTIAL_POLICY');
