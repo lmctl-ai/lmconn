@@ -219,7 +219,7 @@ function writeConfig(dir, withToken, opener) {
   if (opener) {  // npm 'opens the browser' with this script, which only hands the approval link to the human through a file
     const bin = path.join(dir, 'bin'); fs.mkdirSync(bin, { mode: 0o700 });
     const script = path.join(bin, 'xdg-open');  // npm opens links with xdg-open on Linux; this one only passes the link on
-    fs.writeFileSync(script, '#!/bin/sh\nif [ -n "$LMCONN_AUTH_URL_FILE" ]; then printf \'%s\\n\' "$1" > "$LMCONN_AUTH_URL_FILE"; fi\nexit 0\n', { mode: 0o700 });
+    fs.writeFileSync(script, '#!/bin/sh\ncase "$1" in https://www.npmjs.com/auth/cli/[0-9A-Za-z-]*) if [ -n "$LMCONN_AUTH_URL_FILE" ]; then (set -C; printf \'%s\\n\' "$1" > "$LMCONN_AUTH_URL_FILE") 2>/dev/null; fi;; esac\nexit 0\n', { mode: 0o700 });
   }
   const user = path.join(dir, 'userconfig'), glob = path.join(dir, 'globalconfig');
   fs.writeFileSync(user, lines.join('\n') + '\n', { mode: 0o600 });
@@ -238,7 +238,7 @@ export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir
   const full = [...args, ...(envConfig ? [] : ['--userconfig', user, '--globalconfig', glob]), '--registry', `${registry()}/`, '--ignore-scripts', '--no-update-notifier', '--no-audit', '--no-fund', '--workspaces=false', ...(envConfig ? [] : ['--prefix', prefix])];
   return new Promise((resolve) => {
     // npm waits for a web-auth approval only on a terminal; python's pty module gives it one (argv passed as-is, no shell).
-    const child = tty ? spawn('/usr/bin/python3', ['-I', '-c', 'import pty,sys;sys.exit(pty.spawn(sys.argv[1:])>>8)', bin, ...full], { cwd, env, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = tty ? spawn('/usr/bin/python3', ['-I', '-c', 'import os,pty,sys;st=pty.spawn(sys.argv[1:]);c=os.waitstatus_to_exitcode(st);sys.exit(c if c>=0 else 128-c)', bin, ...full], { cwd, env, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
       : spawn(bin, full, { cwd, env, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '', timedOut = false, over = false;
     const cap = (s, d) => (s.length + d.length > LIMITS.output ? (over = true, kill(), s) : s + d);
@@ -292,7 +292,8 @@ async function remoteIntegrity(spec, { token, dir }) {
   return /E404|404 Not Found/i.test(r.err + r.out) ? 'absent' : null;
 }
 
-export async function publish({ file, credential, expectIntegrity, tag, access }) {
+export async function publish({ file, credential, expectIntegrity, tag, access, authUrlFile }) {
+  const onData = authHook(authUrlFile);  // validated before anything else
   if (!/^sha512-[A-Za-z0-9+/]{86}==$/.test(expectIntegrity || '')) throw usage('--expect-integrity must be sha512-<base64>');
   if (tag !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(tag)) throw usage('--tag is invalid');
   if (access !== undefined && !['public', 'restricted'].includes(access)) throw usage('--access must be public or restricted');
@@ -311,7 +312,8 @@ export async function publish({ file, credential, expectIntegrity, tag, access }
     const args = ['publish', copy];
     if (tag) args.push('--tag', tag);
     if (access) args.push('--access', access);
-    const r = await runNpm(args, { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 180000 });
+    const r = await runNpm(args, { cwd: dir, token, dir, tty: true, onData, authUrlFile, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000 });
+    r.err = (r.err + '\n' + r.out).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '');
     const receipt = { package: name, version, integrity: local };
     const spec = `${name}@${version}`;
     const check = async () => { try { return await remoteIntegrity(spec, { token, dir }); } catch { return null; } };
@@ -320,7 +322,7 @@ export async function publish({ file, credential, expectIntegrity, tag, access }
     if (seen === local) return { outcome: 'published_confirmed', ...receipt, registryIntegrity: seen, submitted: r.code === 0 };
     if (seen && seen !== 'absent') return { outcome: 'conflict', ...receipt, registryIntegrity: seen };
     // Failures known to precede submission or a definitive rejection.
-    const code = /^npm error code (ENEEDAUTH|E401|E403|EUSAGE|EINVALIDTAGNAME|EBADENGINE)$/m.exec(r.err)?.[1];
+    const code = /^npm error code (ENEEDAUTH|E401|E403|EOTP|EUSAGE|EINVALIDTAGNAME|EBADENGINE)\s*$/m.exec(r.err)?.[1];
     if (r.code !== 0 && !r.timedOut && !r.over && code && seen === 'absent') return { outcome: 'not_published', ...receipt, reason: code };
     // The PUT may have been sent: reconcile for a window, then stay pending.
     const until = Date.now() + (Number(process.env.LMCONN_NPM_RECONCILE_MS) || 60000);
@@ -330,7 +332,7 @@ export async function publish({ file, credential, expectIntegrity, tag, access }
       if (seen === local) return { outcome: 'published_confirmed', ...receipt, registryIntegrity: seen };
       if (seen && seen !== 'absent') return { outcome: 'conflict', ...receipt, registryIntegrity: seen };
     }
-    return { outcome: 'pending_verification', ...receipt };
+    return { outcome: 'pending_verification', ...receipt, detail: errSummary(r, token) };
   } finally { cleanup(dir); }
 }
 
@@ -345,19 +347,27 @@ export async function whoami(credential) {
 }
 
 const PKG_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+const TRUST_OWNERS = ['lmctl-ai'];  // trusted publishers may only be granted to these GitHub owners
 const AUTH_URL = /https:\/\/www\.npmjs\.com\/auth\/cli\/[0-9A-Za-z-]+/;
 
 // npm's own error lines only (never the token); short, redacted
-const errSummary = (r, token) => r.timedOut ? 'timeout' : safeText((r.err + '\n' + r.out).replace(/\r/g, '').split('\n').filter(l => l.startsWith('npm error')).map(l => l.slice(10).trim()).filter(Boolean).slice(0, 4).join(' | ') || 'error', [token]);
+const errSummary = (r, token) => r.timedOut ? 'timeout' : safeText((r.err + '\n' + r.out).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\u2800-\u28ff]/g, '').replace(/\r/g, '').split('\n').map(l => l.trim()).filter(l => /^npm error/.test(l)).map(l => l.slice(10).trim()).filter(Boolean).slice(0, 4).join(' | ') || 'error', [token]);
 
 // A web-auth URL printed by npm is a one-time approval link for the human (not a secret); hand it over through a file the caller named.
 function authHook(authUrlFile) {
   if (authUrlFile === undefined) return undefined;
-  if (!path.isAbsolute(authUrlFile)) throw usage('--auth-url-file must be an absolute path');
-  let announced = false;
+  if (!path.isAbsolute(authUrlFile) || authUrlFile.includes('\0')) throw usage('--auth-url-file must be an absolute path');
+  let announced = false; let seen = '';
   return (text) => {
-    const m = AUTH_URL.exec(text);
-    if (m && !announced) { announced = true; fs.writeFileSync(authUrlFile, m[0] + '\n', { mode: 0o600 }); }
+    if (announced) return;
+    seen = (seen + text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '')).slice(-4096);  // the link can arrive split across chunks
+    const m = AUTH_URL.exec(seen);
+    if (!m) return;
+    announced = true;
+    try {  // never follow a symlink, never block on a FIFO, only a regular file is ever written
+      const fd = fs.openSync(authUrlFile, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK, 0o600);
+      try { if (!fs.fstatSync(fd).isFile()) return; fs.writeSync(fd, m[0] + '\n'); } finally { fs.closeSync(fd); }
+    } catch { /* the caller sees a timeout instead of a crash */ }
   };
 }
 
@@ -380,9 +390,10 @@ export async function trustList(pkg, credential, authUrlFile) {
 
 export async function trustGithub({ pkg, credential, repo, file, env, authUrlFile }) {
   if (!PKG_NAME.test(pkg) || pkg.length > 214) throw usage('package name is invalid');
-  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(repo)) throw usage('--repo must look like owner/repo');
-  if (!/^[A-Za-z0-9._-]{1,100}\.ya?ml$/.test(file)) throw usage('--file must be a workflow file name ending in .yml or .yaml');
-  if (env !== undefined && !/^[A-Za-z0-9._-]{1,100}$/.test(env)) throw usage('--env is invalid');
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(repo)) throw usage('--repo must look like owner/repo');
+  if (!TRUST_OWNERS.includes(repo.split('/')[0]) && !(testMode() && repo.startsWith('lmctl-test/'))) throw usage('--repo owner is not allowed for trusted publishing');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.ya?ml$/.test(file)) throw usage('--file must be a workflow file name ending in .yml or .yaml');
+  if (env !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(env)) throw usage('--env is invalid');
   const dir = scratch();
   try {
     const onData = authHook(authUrlFile);  // validated before the credential is touched
@@ -399,7 +410,7 @@ export function parseArgs(args) {
   const [command, ...rest] = args;
   if (!['pack', 'publish', 'whoami', 'trust-list', 'trust-github'].includes(command)) throw usage(USAGE);
   const req = { command, positional: null, flags: {} };
-  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access'], whoami: ['credential'], 'trust-list': ['credential', 'auth-url-file'], 'trust-github': ['credential', 'repo', 'file', 'env', 'auth-url-file'] }[command];
+  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access', 'auth-url-file'], whoami: ['credential'], 'trust-list': ['credential', 'auth-url-file'], 'trust-github': ['credential', 'repo', 'file', 'env', 'auth-url-file'] }[command];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a.startsWith('--')) {
@@ -433,7 +444,7 @@ export async function run(args) {
     const req = parseArgs(args);
     let result;
     if (req.command === 'pack') result = await pack(req.positional, path.resolve(req.flags.out));
-    else if (req.command === 'publish') result = await publish({ file: req.positional, credential: req.flags.credential, expectIntegrity: req.flags['expect-integrity'], tag: req.flags.tag, access: req.flags.access });
+    else if (req.command === 'publish') result = await publish({ file: req.positional, credential: req.flags.credential, expectIntegrity: req.flags['expect-integrity'], tag: req.flags.tag, access: req.flags.access, authUrlFile: req.flags['auth-url-file'] });
     else if (req.command === 'trust-list') result = await trustList(req.positional, req.flags.credential, req.flags['auth-url-file']);
     else if (req.command === 'trust-github') result = await trustGithub({ pkg: req.positional, credential: req.flags.credential, repo: req.flags.repo, file: req.flags.file, env: req.flags.env, authUrlFile: req.flags['auth-url-file'] });
     else result = await whoami(req.flags.credential);
