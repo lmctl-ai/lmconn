@@ -372,6 +372,43 @@ function authHook(authUrlFile) {
   };
 }
 
+// Output of a command run on a terminal has colour codes, spinners and warnings around the JSON; keep the JSON (or the last clean lines).
+function ptyJson(raw, token) {
+  const text = String(raw).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\u2800-\u28ff]/g, '').replace(/\r/g, '');
+  const lines = text.split('\n').filter(l => l.trim() && !/^npm (warn|notice)/.test(l));
+  const at = lines.findIndex(l => /^[[{]/.test(l));
+  let parsed = null; try { parsed = JSON.parse((at < 0 ? lines : lines.slice(at)).join('\n')); } catch { /* keep text */ }
+  return parsed ?? safeText(lines.slice(-6).join(' | '), [token]);
+}
+
+const STAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+
+// Staged versions of a package (npm holds a staged publish until someone approves it with 2FA).
+export async function stageList(pkg, credential, authUrlFile) {
+  if (!PKG_NAME.test(pkg) || pkg.length > 214) throw usage('package name is invalid');
+  const onData = authHook(authUrlFile);
+  const dir = scratch();
+  try {
+    const token = tokenFor(credential);
+    const r = await runNpm(['stage', 'list', pkg, '--json'], { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000, envConfig: true, tty: true, authUrlFile, onData });
+    if (r.code !== 0) throw Object.assign(new Error(`npm stage list failed: ${errSummary(r, token)}`), { code: 'NPM_FAILED' });
+    return { package: pkg, staged: ptyJson(r.out, token) };
+  } finally { cleanup(dir); }
+}
+
+// Approving a staged version publishes it; npm asks for a 2FA approval, whose link goes to the human through the file.
+export async function stageApprove(stageId, credential, authUrlFile) {
+  if (!STAGE_ID.test(stageId)) throw usage('stage id is invalid');
+  const onData = authHook(authUrlFile);
+  const dir = scratch();
+  try {
+    const token = tokenFor(credential);
+    const r = await runNpm(['stage', 'approve', stageId], { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000, envConfig: true, tty: true, authUrlFile, onData });
+    if (r.code !== 0) return { outcome: 'failed', stageId, reason: errSummary(r, token) };
+    return { outcome: 'approved', stageId };
+  } finally { cleanup(dir); }
+}
+
 export async function trustList(pkg, credential, authUrlFile) {
   if (!PKG_NAME.test(pkg) || pkg.length > 214) throw usage('package name is invalid');
   const onData = authHook(authUrlFile);  // validated before the credential is touched
@@ -380,12 +417,7 @@ export async function trustList(pkg, credential, authUrlFile) {
     const token = tokenFor(credential);
     const r = await runNpm(['trust', 'list', pkg, '--json'], { cwd: dir, token, dir, timeoutMs: Number(process.env.LMCONN_NPM_TIMEOUT_MS) || 600000, envConfig: true, tty: true, authUrlFile, onData });
     if (r.code !== 0) throw Object.assign(new Error(`npm trust list failed: ${errSummary(r, token)}`), { code: 'NPM_FAILED' });
-    // On a terminal the output has colour codes, spinners and warnings around the JSON; keep the JSON (or the last clean lines).
-    const text = r.out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\u2800-\u28ff]/g, '').replace(/\r/g, '');
-    const lines = text.split('\n').filter(l => l.trim() && !/^npm (warn|notice)/.test(l));
-    const at = lines.findIndex(l => /^[[{]/.test(l));
-    let parsed = null; try { parsed = JSON.parse((at < 0 ? lines : lines.slice(at)).join('\n')); } catch { /* keep text */ }
-    return { package: pkg, trust: parsed ?? safeText(lines.slice(-6).join(' | '), [token]) };
+    return { package: pkg, trust: ptyJson(r.out, token) };
   } finally { cleanup(dir); }
 }
 
@@ -409,9 +441,9 @@ export async function trustGithub({ pkg, credential, repo, file, env, authUrlFil
 
 export function parseArgs(args) {
   const [command, ...rest] = args;
-  if (!['pack', 'publish', 'whoami', 'trust-list', 'trust-github'].includes(command)) throw usage(USAGE);
+  if (!['pack', 'publish', 'whoami', 'trust-list', 'trust-github', 'stage-list', 'stage-approve'].includes(command)) throw usage(USAGE);
   const req = { command, positional: null, flags: {} };
-  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access', 'auth-url-file'], whoami: ['credential'], 'trust-list': ['credential', 'auth-url-file'], 'trust-github': ['credential', 'repo', 'file', 'env', 'auth-url-file'] }[command];
+  const known = { pack: ['out'], publish: ['credential', 'expect-integrity', 'tag', 'access', 'auth-url-file'], whoami: ['credential'], 'trust-list': ['credential', 'auth-url-file'], 'stage-list': ['credential', 'auth-url-file'], 'stage-approve': ['credential', 'auth-url-file'], 'trust-github': ['credential', 'repo', 'file', 'env', 'auth-url-file'] }[command];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a.startsWith('--')) {
@@ -426,7 +458,7 @@ export function parseArgs(args) {
   if (!['whoami'].includes(command) && !req.positional) throw usage(USAGE);
   if (command === 'pack' && !req.flags.out) throw usage('--out is required');
   if (command === 'publish' && (!req.flags.credential || !req.flags['expect-integrity'])) throw usage('--credential and --expect-integrity are required');
-  if (['whoami', 'trust-list', 'trust-github'].includes(command) && !req.flags.credential) throw usage('--credential is required');
+  if (['whoami', 'trust-list', 'trust-github', 'stage-list', 'stage-approve'].includes(command) && !req.flags.credential) throw usage('--credential is required');
   if (command === 'trust-github' && (!req.flags.repo || !req.flags.file)) throw usage('--repo and --file are required');
   return req;
 }
@@ -446,6 +478,8 @@ export async function run(args) {
     let result;
     if (req.command === 'pack') result = await pack(req.positional, path.resolve(req.flags.out));
     else if (req.command === 'publish') result = await publish({ file: req.positional, credential: req.flags.credential, expectIntegrity: req.flags['expect-integrity'], tag: req.flags.tag, access: req.flags.access, authUrlFile: req.flags['auth-url-file'] });
+    else if (req.command === 'stage-list') result = await stageList(req.positional, req.flags.credential, req.flags['auth-url-file']);
+    else if (req.command === 'stage-approve') result = await stageApprove(req.positional, req.flags.credential, req.flags['auth-url-file']);
     else if (req.command === 'trust-list') result = await trustList(req.positional, req.flags.credential, req.flags['auth-url-file']);
     else if (req.command === 'trust-github') result = await trustGithub({ pkg: req.positional, credential: req.flags.credential, repo: req.flags.repo, file: req.flags.file, env: req.flags.env, authUrlFile: req.flags['auth-url-file'] });
     else result = await whoami(req.flags.credential);
