@@ -13,7 +13,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.0.0';
 
-const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'acp', 'mcp']);
+const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'acp', 'mcp', 'npm']);
 
 const USAGE = [
   'lmconn — connectors for lmscript',
@@ -29,6 +29,7 @@ const USAGE = [
   '  lmconn valkey <ping|get|set|del|cmd> ...',
   '  lmconn acp chat --command CMD --prompt P ...',
   '  lmconn mcp <tools|call|session|resources|read|prompts|prompt> --command CMD ...',
+  '  lmconn npm <pack|publish|whoami> ...',
 ].join('\n');
 
 export async function main(argv) {
@@ -62,7 +63,7 @@ export async function main(argv) {
   try {
     // Protected handles are only usable by the origin-checking, receipt-only HTTP adapter.
     // Generic provider/GitHub adapters retain their legacy result contracts, so may not consume them.
-    if (brokerMode() && !['cred', 'http', 'oauth'].includes(area)) return emitFail('CREDENTIAL_POLICY', 'Broker mode exposes only credential and bound HTTP operations');
+    if (brokerMode() && !['cred', 'http', 'oauth', 'npm'].includes(area)) return emitFail('CREDENTIAL_POLICY', 'Broker mode exposes only credential and bound HTTP operations');
     const protectedHandle = service => typeof service === 'string' && policy(service)?.noReveal;
     if (area === 'github' && protectedHandle('github')) return emitFail('CREDENTIAL_POLICY', 'Protected handles require the bound HTTP adapter');
     if (area === 'llm' && argv[1] === 'chat' && protectedHandle(argv[2])) return emitFail('CREDENTIAL_POLICY', 'Protected handles require the bound HTTP adapter');

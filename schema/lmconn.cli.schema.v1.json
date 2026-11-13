@@ -1024,6 +1024,75 @@
           "description": "JSON {\"name\":...,\"arguments\":{...}} per call (repeatable)"
         }
       ]
+    },
+    {
+      "name": "npm_pack",
+      "access": "write",
+      "description": "Pack a package directory with npm (scripts off, no credential) and print its sha512",
+      "params": [
+        {
+          "name": "dir",
+          "type": "string",
+          "positional": true,
+          "description": "Package directory"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1",
+          "description": "Output tarball path"
+        }
+      ]
+    },
+    {
+      "name": "npm_publish",
+      "access": "write",
+      "description": "Publish a tarball with a protected credential; prints a receipt only",
+      "params": [
+        {
+          "name": "file",
+          "type": "string",
+          "positional": true,
+          "description": "Tarball produced by npm pack"
+        },
+        {
+          "name": "credential",
+          "type": "string",
+          "occurs": "1",
+          "description": "Protected credential handle bound to https://registry.npmjs.org"
+        },
+        {
+          "name": "expectIntegrity",
+          "type": "string",
+          "occurs": "1",
+          "description": "Expected sha512-<base64> of the tarball"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "occurs": "?",
+          "description": "dist-tag (required for a prerelease version)"
+        },
+        {
+          "name": "access",
+          "type": "string",
+          "occurs": "?",
+          "description": "public or restricted"
+        }
+      ]
+    },
+    {
+      "name": "npm_whoami",
+      "access": "read",
+      "description": "Return the npm user name for a protected credential",
+      "params": [
+        {
+          "name": "credential",
+          "type": "string",
+          "occurs": "1",
+          "description": "Protected credential handle"
+        }
+      ]
     }
   ],
   "globals": [
