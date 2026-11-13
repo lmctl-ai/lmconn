@@ -34,8 +34,9 @@ const registry = () => {
 const nodeDir = () => path.dirname(process.execPath);
 function npmBin() {
   if (testMode() && process.env.LMCONN_NPM_BIN) return process.env.LMCONN_NPM_BIN;
-  const pinned = path.join(os.homedir(), '.lmconn', 'npm', 'bin', 'npm');
-  if (fs.existsSync(pinned)) { const st = fs.statSync(pinned); if (st.uid === process.getuid() && !(st.mode & 0o022)) return pinned; }
+  for (const pinned of [path.join(os.homedir(), '.lmconn', 'npm', 'node_modules', '.bin', 'npm'), path.join(os.homedir(), '.lmconn', 'npm', 'bin', 'npm')]) {  // operator-pinned npm
+    if (fs.existsSync(pinned)) { const st = fs.statSync(pinned); if (st.uid === process.getuid() && !(st.mode & 0o022)) return pinned; }
+  }
   return path.join(nodeDir(), 'npm');
 }
 
@@ -249,7 +250,7 @@ export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir
     const kill = () => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } };
     active.pids.add(child.pid);
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
-    child.on('error', () => { clearTimeout(timer); resolve({ code: 127, out, err, timedOut, over }); });
+    child.on('error', (e) => { clearTimeout(timer); resolve({ code: 127, out, err: err || ('spawn ' + (e && e.code)), timedOut, over }); });
     child.on('close', (code) => { clearTimeout(timer); kill(); active.pids.delete(child.pid); resolve({ code, out, err, timedOut, over }); });
   });
 }
@@ -276,7 +277,7 @@ export async function pack(dirArg, out) {
     fs.cpSync(src, work, { recursive: true, filter: (p) => !['.git', 'node_modules'].includes(path.basename(p)) });
     const dest = path.join(dir, 'out'); fs.mkdirSync(dest, { mode: 0o700 });
     const r = await runNpm(['pack', '--pack-destination', dest, '--json'], { cwd: work, dir, prefix: work });
-    if (r.code !== 0) throw Object.assign(new Error('npm pack failed'), { code: 'NPM_FAILED' });
+    if (r.code !== 0) throw Object.assign(new Error('npm pack failed (exit ' + r.code + '): ' + errSummary(r, '') + ' ' + String(r.err).slice(0, 300).replace(/\s+/g, ' ')), { code: 'NPM_FAILED' });  // no credential is involved in pack
     const names = fs.readdirSync(dest).filter(n => n.endsWith('.tgz'));
     if (names.length !== 1) throw Object.assign(new Error('npm pack produced no single tarball'), { code: 'NPM_FAILED' });
     const bytes = fs.readFileSync(path.join(dest, names[0]));
