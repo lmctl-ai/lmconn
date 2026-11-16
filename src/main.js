@@ -13,7 +13,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.0.0';
 
-const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'acp', 'mcp', 'npm']);
+const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'ldap', 'acp', 'mcp', 'npm']);
 
 const USAGE = [
   'lmconn — connectors for lmscript',
@@ -27,6 +27,7 @@ const USAGE = [
   '  lmconn github <...> ...',
   '  lmconn oauth <authorize|device|refresh|status|list> ...',
   '  lmconn valkey <ping|get|set|del|cmd> ...',
+  '  lmconn ldap <ping|bind|search|get|add|modify|del> ...',
   '  lmconn acp chat --command CMD --prompt P ...',
   '  lmconn mcp <tools|call|session|resources|read|prompts|prompt> --command CMD ...',
   '  lmconn npm <pack|publish|whoami> ...',

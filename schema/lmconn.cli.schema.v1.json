@@ -717,6 +717,412 @@
       ]
     },
     {
+      "name": "ldap_ping",
+      "access": "read",
+      "description": "Ping LDAP server via native LDAPv3 RootDSE query or REST",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_bind",
+      "access": "read",
+      "description": "Authenticate (Simple Bind) against LDAP server",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "description": "Bind DN"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "occurs": "1",
+          "description": "Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_search",
+      "access": "read",
+      "description": "Search LDAP entries by base DN, scope, and RFC 4515 filter",
+      "params": [
+        {
+          "name": "base",
+          "type": "string",
+          "occurs": "?",
+          "default": "",
+          "description": "Search base DN"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "occurs": "?",
+          "default": "(objectClass=*)",
+          "description": "Search filter"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "occurs": "?",
+          "default": "sub",
+          "enum": [
+            "base",
+            "one",
+            "sub"
+          ],
+          "description": "Search scope"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_get",
+      "access": "read",
+      "description": "Get a single LDAP entry by DN",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Distinguished Name (DN)"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_add",
+      "access": "write",
+      "description": "Add an LDAP entry with JSON attributes",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Distinguished Name (DN)"
+        },
+        {
+          "name": "attributes",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "JSON object of attributes"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_modify",
+      "access": "write",
+      "description": "Modify an LDAP entry with JSON attributes",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Distinguished Name (DN)"
+        },
+        {
+          "name": "changes",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "JSON object of attribute replacements"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_del",
+      "access": "write",
+      "description": "Delete an LDAP entry by DN",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Distinguished Name (DN)"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
       "name": "acp_chat",
       "access": "write",
       "description": "Run a multi-turn conversation with an ACP (Agent Client Protocol) agent over stdio",
