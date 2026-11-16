@@ -27,7 +27,7 @@ const USAGE = [
   '  lmconn github <...> ...',
   '  lmconn oauth <authorize|device|refresh|status|list> ...',
   '  lmconn valkey <ping|get|set|del|cmd> ...',
-  '  lmconn ldap <ping|bind|search|get|add|modify|del> ...',
+  '  lmconn ldap <ping|bind|whoami|search|get|add|modify|compare|del> ...',
   '  lmconn saml <ping|metadata|sp-metadata|users|user-get|user-add|user-del|authn|assertion|verify> ...',
   '  lmconn acp chat --command CMD --prompt P ...',
   '  lmconn mcp <tools|call|session|resources|read|prompts|prompt> --command CMD ...',

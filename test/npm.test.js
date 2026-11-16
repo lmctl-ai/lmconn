@@ -122,7 +122,9 @@ async function packDemo(version = '1.0.0', extra = {}) {
   return { r, out, src };
 }
 
-test('pack uses real npm with scripts off and returns the file hash', async () => {
+const skipNonLinux = process.platform !== 'linux' ? 'npm pty/xdg-open bridge requires Linux' : false;
+
+test('pack uses real npm with scripts off and returns the file hash', { skip: skipNonLinux }, async () => {
   const { r, out } = await packDemo();
   assert.equal(r.code, 0, r.out + r.err);
   assert.equal(r.json.result.integrity, sri(fs.readFileSync(out)));
@@ -131,7 +133,7 @@ test('pack uses real npm with scripts off and returns the file hash', async () =
   assert.deepEqual(fs.readdirSync(join(dir, 'run')), [], 'scratch directory removed');
 });
 
-test('publish: token only through env, receipt only, hostile caller env ignored, scratch removed', async () => {
+test('publish: token only through env, receipt only, hostile caller env ignored, scratch removed', { skip: skipNonLinux }, async () => {
   const reg = await mockRegistry('ok');
   try {
     assert.equal((await store('npmcred', reg.url)).code, 0);
@@ -151,7 +153,7 @@ test('publish: token only through env, receipt only, hostile caller env ignored,
   } finally { reg.server.close(); }
 });
 
-test('publish: conflict, pending, refusals before the credential is touched', async () => {
+test('publish: conflict, pending, refusals before the credential is touched', { skip: skipNonLinux }, async () => {
   const conflict = await mockRegistry('conflict');
   const pending = await mockRegistry('fail500');
   try {
@@ -183,7 +185,7 @@ test('publish: conflict, pending, refusals before the credential is touched', as
   } finally { conflict.server.close(); pending.server.close(); }
 });
 
-test('whoami returns only the user name; unknown flags are refused', async () => {
+test('whoami returns only the user name; unknown flags are refused', { skip: skipNonLinux }, async () => {
   const reg = await mockRegistry('ok');
   try {
     assert.equal((await store('w1', reg.url)).code, 0);
@@ -197,7 +199,7 @@ test('whoami returns only the user name; unknown flags are refused', async () =>
   } finally { reg.server.close(); }
 });
 
-test('an ancestor project config cannot steer npm; test overrides are ignored without LMCONN_NPM_TEST', async () => {
+test('an ancestor project config cannot steer npm; test overrides are ignored without LMCONN_NPM_TEST', { skip: skipNonLinux }, async () => {
   const reg = await mockRegistry('ok');
   try {
     assert.equal((await store('anc', reg.url)).code, 0);
@@ -222,7 +224,7 @@ test('an ancestor project config cannot steer npm; test overrides are ignored wi
   } finally { reg.server.close(); }
 });
 
-test('trust operations refuse malformed package, repo, workflow and env before any credential is read', async () => {
+test('trust operations refuse malformed package, repo, workflow and env before any credential is read', { skip: skipNonLinux }, async () => {
   const base = { env: { LMCONN_STORE_MODE: 'broker' } };
   const bad = [
     ['npm', 'trust-github', 'Not A Package', '--credential', 'nosuch', '--repo', 'lmctl-ai/x', '--file', 'a.yml'],
@@ -241,7 +243,7 @@ test('trust operations refuse malformed package, repo, workflow and env before a
   }
 });
 
-test('trust-github passes only validated flags and hands the approval link over through a file', async () => {
+test('trust-github passes only validated flags and hands the approval link over through a file', { skip: skipNonLinux }, async () => {
   const reg = await mockRegistry('ok');
   try {
     assert.equal((await store('tg', reg.url)).code, 0);

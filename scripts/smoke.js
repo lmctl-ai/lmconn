@@ -31,13 +31,14 @@ let r = run(['--version']);
 check('--version', r.status === 0 && r.envelope?.ok && r.envelope.result.version === version,
   `status=${r.status} stdout=${r.stdout.slice(0, 200)}`);
 
+const expectedSchema = JSON.parse(readFileSync(new URL('../schema/lmconn.cli.schema.v1.json', import.meta.url), 'utf8'));
 r = run(['--cli-schema', '--json']);
 const ops = r.envelope?.operations ?? (() => { try { return JSON.parse(r.stdout).operations; } catch { return null; } })();
-check('--cli-schema lists 23 operations', r.status === 0 && Array.isArray(ops) && ops.length === 23,
+check(`--cli-schema lists ${expectedSchema.operations.length} operations`, r.status === 0 && Array.isArray(ops) && ops.length === expectedSchema.operations.length,
   `got ${ops?.length}`);
 const opNames = new Set((ops ?? []).map((o) => o.name));
-check('--cli-schema lists OAuth and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store'].every((n) => opNames.has(n)),
-  `names=${[...opNames].filter((n) => n.startsWith('oauth_')).join(',') || 'none'}`);
+check('--cli-schema lists OAuth, LDAP, SAML and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store', 'ldap_ping', 'ldap_bind', 'ldap_whoami', 'ldap_search', 'ldap_compare', 'saml_ping', 'saml_assertion', 'saml_verify'].every((n) => opNames.has(n)),
+  `names=${[...opNames].filter((n) => n.startsWith('ldap_') || n.startsWith('saml_')).join(',') || 'none'}`);
 
 r = run(['cred', 'set', 'smoke', 'api_key', '--stdin'], 'smoke-token-123');
 check('cred set (stdin)', r.status === 0 && r.envelope?.ok === true, r.stdout.slice(0, 200));

@@ -6,6 +6,8 @@ import {
   run,
   sendLdap,
   sendRest,
+  parseLdapUrl,
+  formatLdif,
   berInt,
   berEnum,
   berOctetString,
@@ -16,11 +18,12 @@ import {
   decodeBerInt,
 } from '../src/cmd-ldap.js';
 
-function ldapResultOp(tag, code = 0, matchedDN = '', diag = '') {
+function ldapResultOp(tag, code = 0, matchedDN = '', diag = '', extra = []) {
   return berSeq([
     berEnum(code),
     berOctetString(matchedDN),
     berOctetString(diag),
+    ...extra,
   ], tag);
 }
 
@@ -39,9 +42,13 @@ function searchEntryOp(dn, attributes) {
 function createMockLdapServer() {
   const store = new Map();
   store.set('dc=example,dc=com', { objectClass: ['top', 'dcObject', 'organization'], dc: 'example', o: 'Example' });
+  const sockets = new Set();
 
   const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
     let buf = Buffer.alloc(0);
+    let boundDn = '';
     socket.on('data', (chunk) => {
       buf = Buffer.concat([buf, chunk]);
       while (buf.length > 0) {
@@ -66,8 +73,15 @@ function createMockLdapServer() {
           if (bindDn && bindPw === 'wrong') {
             socket.write(berSeq([berInt(msgId), ldapResultOp(0x61, 49, '', 'Invalid credentials')]));
           } else {
+            boundDn = bindDn;
             socket.write(berSeq([berInt(msgId), ldapResultOp(0x61, 0)]));
           }
+          continue;
+        }
+        // ExtendedRequest (0x77) -> WhoAmI
+        if (op.tag === 0x77) {
+          const authz = boundDn ? `dn:${boundDn}` : 'anonymous';
+          socket.write(berSeq([berInt(msgId), ldapResultOp(0x78, 0, '', '', [berOctetString(authz, 0x8b)])]));
           continue;
         }
         // SearchRequest (0x63)
@@ -124,12 +138,32 @@ function createMockLdapServer() {
           }
           for (const chg of readBerChildren(mParts[1].value)) {
             const chgParts = readBerChildren(chg.value);
+            const modOp = decodeBerInt(chgParts[0].value);
             const modAttr = readBerChildren(chgParts[1].value);
             const name = modAttr[0].value.toString('utf8');
             const vals = readBerChildren(modAttr[1].value).map((v) => v.value.toString('utf8'));
-            entry[name] = vals.length === 1 ? vals[0] : vals;
+            if (modOp === 1) delete entry[name];
+            else entry[name] = vals.length === 1 ? vals[0] : vals;
           }
           socket.write(berSeq([berInt(msgId), ldapResultOp(0x67, 0)]));
+          continue;
+        }
+        // CompareRequest (0x6e)
+        if (op.tag === 0x6e) {
+          const cParts = readBerChildren(op.value);
+          const dn = cParts[0].value.toString('utf8');
+          const ava = readBerChildren(cParts[1].value);
+          const attr = ava[0].value.toString('utf8');
+          const val = ava[1].value.toString('utf8');
+          const entry = store.get(dn);
+          if (!entry) {
+            socket.write(berSeq([berInt(msgId), ldapResultOp(0x6f, 32, '', 'No such object')]));
+            continue;
+          }
+          const cur = entry[attr];
+          const vals = Array.isArray(cur) ? cur : (cur !== undefined ? [cur] : []);
+          const matched = vals.some((item) => String(item).toLowerCase() === val.toLowerCase());
+          socket.write(berSeq([berInt(msgId), ldapResultOp(0x6f, matched ? 6 : 5)]));
           continue;
         }
         // DelRequest (0x4a)
@@ -147,7 +181,7 @@ function createMockLdapServer() {
       resolve({
         port: server.address().port,
         close: () => new Promise((res) => {
-          if (server.closeAllConnections) server.closeAllConnections();
+          for (const s of sockets) s.destroy();
           server.close(res);
         }),
       });
@@ -224,7 +258,20 @@ function createMockRestServer() {
   });
 }
 
-test('ldap client via native LDAPv3 BER protocol', async () => {
+test('RFC 4516 LDAP URL parser and LDIF formatter', () => {
+  const parsed = parseLdapUrl('ldap://127.0.0.1:3389/dc=example,dc=com?cn,mail?sub?(objectClass=person)');
+  assert.equal(parsed.host, '127.0.0.1');
+  assert.equal(parsed.port, 3389);
+  assert.equal(parsed.dn, 'dc=example,dc=com');
+  assert.deepEqual(parsed.attrs, ['cn', 'mail']);
+  assert.equal(parsed.scope, 'sub');
+  assert.equal(parsed.filter, '(objectClass=person)');
+
+  const ldif = formatLdif({ dn: 'cn=Alice,dc=example,dc=com', attributes: { cn: 'Alice', objectClass: ['top', 'person'] } });
+  assert.match(ldif, /^dn: cn=Alice,dc=example,dc=com\ncn: Alice\nobjectClass: top\nobjectClass: person\n$/);
+});
+
+test('ldap client via native LDAPv3 BER protocol (including whoami, compare, attrs, limits)', async () => {
   const mock = await createMockLdapServer();
   try {
     const ping = await sendLdap('127.0.0.1', mock.port, { op: 'ping' });
@@ -232,6 +279,13 @@ test('ldap client via native LDAPv3 BER protocol', async () => {
 
     const bindRes = await sendLdap('127.0.0.1', mock.port, { op: 'bind', dn: 'cn=admin,dc=example,dc=com', password: 'secret' });
     assert.deepEqual(bindRes, { bound: true, dn: 'cn=admin,dc=example,dc=com' });
+
+    const whoamiRes = await sendLdap('127.0.0.1', mock.port, {
+      op: 'whoami',
+      bindDn: 'cn=admin,dc=example,dc=com',
+      bindPw: 'secret',
+    });
+    assert.deepEqual(whoamiRes, { authzId: 'dn:cn=admin,dc=example,dc=com' });
 
     const dn = 'cn=Alice,dc=example,dc=com';
     const addRes = await sendLdap('127.0.0.1', mock.port, {
@@ -243,20 +297,30 @@ test('ldap client via native LDAPv3 BER protocol', async () => {
     });
     assert.equal(addRes, 'OK');
 
-    const getRes = await sendLdap('127.0.0.1', mock.port, { op: 'get', dn });
+    const cmpTrue = await sendLdap('127.0.0.1', mock.port, { op: 'compare', dn, attr: 'sn', value: 'Smith' });
+    assert.equal(cmpTrue.match, true);
+    const cmpFalse = await sendLdap('127.0.0.1', mock.port, { op: 'compare', dn, attr: 'sn', value: 'Jones' });
+    assert.equal(cmpFalse.match, false);
+
+    const getRes = await sendLdap('127.0.0.1', mock.port, { op: 'get', dn, attrs: ['cn', 'mail'] });
     assert.equal(getRes.dn, dn);
-    assert.equal(getRes.attributes.cn, 'Alice');
-    assert.equal(getRes.attributes.mail, 'alice@example.com');
+    assert.deepEqual(getRes.attributes, { cn: 'Alice', mail: 'alice@example.com' });
 
     const modRes = await sendLdap('127.0.0.1', mock.port, {
       op: 'modify',
       dn,
-      changes: { mail: 'alice.smith@example.com' },
+      changes: { replace: { mail: 'alice.smith@example.com' } },
     });
     assert.equal(modRes, 'OK');
 
-    const searchRes = await sendLdap('127.0.0.1', mock.port, { op: 'search', base: 'dc=example,dc=com', filter: '(cn=Alice)', scope: 'sub' });
-    assert.equal(searchRes.length, 2);
+    const searchRes = await sendLdap('127.0.0.1', mock.port, {
+      op: 'search',
+      base: 'dc=example,dc=com',
+      filter: '(cn=Alice)',
+      scope: 'sub',
+      sizeLimit: 1,
+    });
+    assert.equal(searchRes.length, 1);
 
     const delRes = await sendLdap('127.0.0.1', mock.port, { op: 'del', dn });
     assert.equal(delRes, 1);
@@ -274,6 +338,9 @@ test('ldap client via REST protocol', async () => {
     const ping = await sendRest('127.0.0.1', mock.port, { op: 'ping' });
     assert.equal(ping, 'PONG');
 
+    const whoami = await sendRest('127.0.0.1', mock.port, { op: 'whoami', bindDn: 'cn=admin,dc=example,dc=com', bindPw: 'secret' });
+    assert.deepEqual(whoami, { authzId: 'dn:cn=admin,dc=example,dc=com' });
+
     const dn = 'cn=Bob,dc=example,dc=com';
     const addRes = await sendRest('127.0.0.1', mock.port, {
       op: 'add',
@@ -282,9 +349,12 @@ test('ldap client via REST protocol', async () => {
     });
     assert.equal(addRes, 'OK');
 
-    const getRes = await sendRest('127.0.0.1', mock.port, { op: 'get', dn });
+    const cmp = await sendRest('127.0.0.1', mock.port, { op: 'compare', dn, attr: 'sn', value: 'Jones' });
+    assert.equal(cmp.match, true);
+
+    const getRes = await sendRest('127.0.0.1', mock.port, { op: 'get', dn, attrs: ['cn'] });
     assert.equal(getRes.dn, dn);
-    assert.equal(getRes.attributes.cn, 'Bob');
+    assert.deepEqual(getRes.attributes, { cn: 'Bob' });
 
     const delRes = await sendRest('127.0.0.1', mock.port, { op: 'del', dn });
     assert.equal(delRes, 1);
@@ -293,7 +363,7 @@ test('ldap client via REST protocol', async () => {
   }
 });
 
-test('ldap CLI run() commands in both modes', async () => {
+test('ldap CLI run() commands in both modes and with ldap:// URLs and LDIF output', async () => {
   const ldapMock = await createMockLdapServer();
   const restMock = await createMockRestServer();
   try {
@@ -310,6 +380,17 @@ test('ldap CLI run() commands in both modes', async () => {
       assert.equal(captured.ok, true);
       assert.equal(captured.result.result, 'PONG');
       assert.equal(captured.result.mode, 'ldap');
+
+      const exitUrl = await run([
+        'search',
+        `ldap://127.0.0.1:${ldapMock.port}/dc=example,dc=com?dc,o?base?(objectClass=*)`,
+        '--format', 'ldif',
+      ]);
+      assert.equal(exitUrl, 0);
+      assert.equal(captured.ok, true);
+      assert.equal(captured.result.result.length, 1);
+      assert.deepEqual(captured.result.result[0].attributes, { dc: 'example', o: 'Example' });
+      assert.match(captured.result.ldif, /dn: dc=example,dc=com/);
 
       const exit1 = await run(['ping', '--port', String(restMock.port), '--mode', 'rest']);
       assert.equal(exit1, 0);

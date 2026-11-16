@@ -1,7 +1,7 @@
 {
   "schema": "cli.schema.v1",
   "tool": "lmconn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "policy": {
     "dryrun": false,
     "readonly": false
@@ -735,6 +735,12 @@
           "description": "LDAP port (default 389 for ldap, 8080 for rest)"
         },
         {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
+        },
+        {
           "name": "mode",
           "type": "string",
           "occurs": "?",
@@ -782,7 +788,69 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_whoami",
+      "access": "read",
+      "description": "Return LDAP authorization identity (RFC 4532 Who Am I? extended operation)",
+      "params": [
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Optional Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
@@ -807,7 +875,7 @@
     {
       "name": "ldap_search",
       "access": "read",
-      "description": "Search LDAP entries by base DN, scope, and RFC 4515 filter",
+      "description": "Search LDAP entries by base DN, scope, RFC 4515 filter, and attribute projection",
       "params": [
         {
           "name": "base",
@@ -836,6 +904,37 @@
           "description": "Search scope"
         },
         {
+          "name": "attrs",
+          "type": "string",
+          "occurs": "?",
+          "description": "Comma-separated attribute list to return"
+        },
+        {
+          "name": "sizeLimit",
+          "type": "number",
+          "occurs": "?",
+          "default": 0,
+          "description": "Maximum entries to return (0 = unlimited)"
+        },
+        {
+          "name": "timeLimit",
+          "type": "number",
+          "occurs": "?",
+          "default": 0,
+          "description": "Search time limit in seconds (0 = unlimited)"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "occurs": "?",
+          "default": "json",
+          "enum": [
+            "json",
+            "ldif"
+          ],
+          "description": "Output format: json or ldif"
+        },
+        {
           "name": "bindDn",
           "type": "string",
           "occurs": "?",
@@ -858,7 +957,13 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
@@ -890,7 +995,24 @@
           "type": "string",
           "occurs": "1",
           "positional": true,
-          "description": "Distinguished Name (DN)"
+          "description": "Distinguished Name (DN) or ldap:// URL"
+        },
+        {
+          "name": "attrs",
+          "type": "string",
+          "occurs": "?",
+          "description": "Comma-separated attribute list to return"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "occurs": "?",
+          "default": "json",
+          "enum": [
+            "json",
+            "ldif"
+          ],
+          "description": "Output format: json or ldif"
         },
         {
           "name": "bindDn",
@@ -915,7 +1037,13 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
@@ -940,7 +1068,7 @@
     {
       "name": "ldap_add",
       "access": "write",
-      "description": "Add an LDAP entry with JSON attributes",
+      "description": "Add a new LDAP entry with JSON attributes",
       "params": [
         {
           "name": "dn",
@@ -960,13 +1088,13 @@
           "name": "bindDn",
           "type": "string",
           "occurs": "?",
-          "description": "Optional Bind DN"
+          "description": "Bind DN"
         },
         {
           "name": "bindPw",
           "type": "string",
           "occurs": "?",
-          "description": "Optional Bind password"
+          "description": "Bind password"
         },
         {
           "name": "host",
@@ -979,7 +1107,13 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
@@ -1004,7 +1138,7 @@
     {
       "name": "ldap_modify",
       "access": "write",
-      "description": "Modify an LDAP entry with JSON attributes",
+      "description": "Modify attributes of an existing LDAP entry",
       "params": [
         {
           "name": "dn",
@@ -1018,7 +1152,84 @@
           "type": "string",
           "occurs": "1",
           "positional": true,
-          "description": "JSON object of attribute replacements"
+          "description": "JSON object of attribute modifications"
+        },
+        {
+          "name": "bindDn",
+          "type": "string",
+          "occurs": "?",
+          "description": "Bind DN"
+        },
+        {
+          "name": "bindPw",
+          "type": "string",
+          "occurs": "?",
+          "description": "Bind password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "LDAP host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "occurs": "?",
+          "default": "ldap",
+          "enum": [
+            "ldap",
+            "rest"
+          ],
+          "description": "Protocol mode: ldap or rest"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "ldap_compare",
+      "access": "read",
+      "description": "Compare an attribute value on an LDAP entry (RFC 4511 CompareRequest)",
+      "params": [
+        {
+          "name": "dn",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Distinguished Name (DN)"
+        },
+        {
+          "name": "attr",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Attribute name"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "occurs": "1",
+          "positional": true,
+          "description": "Assertion value"
         },
         {
           "name": "bindDn",
@@ -1043,7 +1254,13 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
@@ -1081,13 +1298,13 @@
           "name": "bindDn",
           "type": "string",
           "occurs": "?",
-          "description": "Optional Bind DN"
+          "description": "Bind DN"
         },
         {
           "name": "bindPw",
           "type": "string",
           "occurs": "?",
-          "description": "Optional Bind password"
+          "description": "Bind password"
         },
         {
           "name": "host",
@@ -1100,7 +1317,13 @@
           "name": "port",
           "type": "number",
           "occurs": "?",
-          "description": "LDAP port"
+          "description": "LDAP port (default 389 for ldap, 8080 for rest)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "RFC 4516 ldap:// URL override"
         },
         {
           "name": "mode",
