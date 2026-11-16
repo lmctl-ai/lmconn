@@ -1123,6 +1123,443 @@
       ]
     },
     {
+      "name": "saml_ping",
+      "access": "read",
+      "description": "Ping a SAML 2.0 server (lmsaml)",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_metadata",
+      "access": "read",
+      "description": "Fetch SAML 2.0 IdP EntityDescriptor XML metadata",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_sp_metadata",
+      "access": "read",
+      "description": "Fetch SAML 2.0 SP EntityDescriptor XML metadata",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_users",
+      "access": "read",
+      "description": "List SAML IdP users",
+      "params": [
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_user_get",
+      "access": "read",
+      "description": "Get a SAML IdP user by username",
+      "params": [
+        {
+          "name": "user",
+          "type": "string",
+          "occurs": "1",
+          "description": "Username"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_user_add",
+      "access": "write",
+      "description": "Create or update a SAML IdP user",
+      "params": [
+        {
+          "name": "user",
+          "type": "string",
+          "occurs": "1",
+          "description": "Username"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "occurs": "?",
+          "description": "User email"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "occurs": "?",
+          "description": "User password"
+        },
+        {
+          "name": "attributes",
+          "type": "string",
+          "occurs": "?",
+          "description": "Additional user attributes JSON"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_user_del",
+      "access": "write",
+      "description": "Delete a SAML IdP user",
+      "params": [
+        {
+          "name": "user",
+          "type": "string",
+          "occurs": "1",
+          "description": "Username"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_authn",
+      "access": "read",
+      "description": "Authenticate a SAML IdP user",
+      "params": [
+        {
+          "name": "user",
+          "type": "string",
+          "occurs": "1",
+          "description": "Username"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "occurs": "1",
+          "description": "Password"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_assertion",
+      "access": "read",
+      "description": "Issue a cryptographically signed SAML 2.0 Response & Assertion",
+      "params": [
+        {
+          "name": "user",
+          "type": "string",
+          "occurs": "?",
+          "default": "admin",
+          "description": "Username"
+        },
+        {
+          "name": "audience",
+          "type": "string",
+          "occurs": "?",
+          "description": "SP EntityID / Audience URL"
+        },
+        {
+          "name": "acsUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Assertion Consumer Service URL"
+        },
+        {
+          "name": "requestId",
+          "type": "string",
+          "occurs": "?",
+          "description": "AuthnRequest ID"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
+      "name": "saml_verify",
+      "access": "read",
+      "description": "Cryptographically verify a signed SAML 2.0 Response & Assertion",
+      "params": [
+        {
+          "name": "response",
+          "type": "string",
+          "occurs": "1",
+          "description": "Base64 or XML SAML 2.0 Response"
+        },
+        {
+          "name": "audience",
+          "type": "string",
+          "occurs": "?",
+          "description": "Expected SP EntityID / Audience"
+        },
+        {
+          "name": "acsUrl",
+          "type": "string",
+          "occurs": "?",
+          "description": "Expected ACS URL"
+        },
+        {
+          "name": "requestId",
+          "type": "string",
+          "occurs": "?",
+          "description": "Expected InResponseTo ID"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "occurs": "?",
+          "default": "127.0.0.1",
+          "description": "SAML server host"
+        },
+        {
+          "name": "port",
+          "type": "number",
+          "occurs": "?",
+          "default": 8080,
+          "description": "SAML server port"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "occurs": "?",
+          "description": "Base URL override"
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "occurs": "?",
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        }
+      ]
+    },
+    {
       "name": "acp_chat",
       "access": "write",
       "description": "Run a multi-turn conversation with an ACP (Agent Client Protocol) agent over stdio",
