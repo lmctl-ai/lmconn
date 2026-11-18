@@ -4,6 +4,11 @@ The credential store keeps every value in `creds.value` as AES-256-GCM ciphertex
 (backup, snapshot, sync folder, accidental commit, disk image, a bug that dumps the table) is then not a
 credential leak. Zero dependencies (`node:crypto`), still one SQLite file, no daemon, no passphrase prompt.
 
+**Breaking change on Windows.** File-based keys fail closed there (`STORE_SECURITY`) until lmconn has native ACL
+support, so on Windows `cred set` (and every other write) needs `LMCONN_KEY` set to a base64 32-byte key, or
+`LMCONN_ALLOW_PLAINTEXT=1` to keep working with a legacy plaintext store. Reads of a store that holds ciphertext need
+`LMCONN_KEY` too. Linux and macOS are unaffected: a key file is created on the first write.
+
 ## Threat model (honest)
 
 Protected: disclosure of the database file **alone**.
@@ -161,7 +166,7 @@ the old IK and a database can unwrap the DEKs, which are unchanged). Do:
 
 ## Windows
 
-Encryption works with `LMCONN_KEY`. A file-based key (default or `LMCONN_KEY_FILE`) fails closed with
+Encryption works with `LMCONN_KEY` (the whole test suite runs that way on Windows CI). A file-based key (default or `LMCONN_KEY_FILE`) fails closed with
 `STORE_SECURITY` until lmconn has native owner/DACL enforcement (no `O_NOFOLLOW`, no `geteuid`), the same stance
 as the broker store. `key backup` is refused on Windows for the same reason. With no `LMCONN_KEY`, a legacy store
 stays usable only with `LMCONN_ALLOW_PLAINTEXT=1` (explicit opt-in). `LMCONN_KEY` is inherited by children

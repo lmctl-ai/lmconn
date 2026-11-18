@@ -1,6 +1,6 @@
 // Encryption at rest: real SQLite files, real AES-GCM, real child processes, real modes and symlinks.
 // Every secret is synthetic; every store lives in a temp directory with its own key directory.
-import { test, after } from 'node:test';
+import { test as baseTest, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,6 +16,16 @@ import { policy, putPolicy } from '../src/credential-policy.js';
 import { resetKeyCache } from '../src/keystore.js';
 import { rotateKey, rotateData, encryptExisting } from '../src/crypto-store.js';
 import { request, parseArgs } from '../src/cmd-http.js';
+
+// Windows has no file-based key (STORE_SECURITY by design; the suite there runs encrypted through LMCONN_KEY, see
+// setup-env.mjs). Tests that assert file keys, key directories, POSIX modes or links skip there; the env-key tests run.
+const WINDOWS_SKIP = 'file-based keys fail closed on Windows; the LMCONN_KEY tests cover it there';
+const runsOnWindows = name => /^(LMCONN_KEY |env-key |Windows only)/.test(name);
+const test = (name, options, fn) => {
+  if (typeof options === 'function') { fn = options; options = {}; }
+  const skip = options.skip || (process.platform === 'win32' && !runsOnWindows(name) ? WINDOWS_SKIP : false);
+  return baseTest(name, { ...options, skip }, fn);
+};
 
 const cli = fileURLToPath(new URL('../bin/lmconn.js', import.meta.url));
 const root = fs.mkdtempSync(join(tmpdir(), 'lmconn-enc-'));
@@ -840,4 +850,39 @@ test('an unreadable key directory is reported as a key directory permission prob
     assert.match(error.message, /key directory is not accessible \(permission problem\)/);
   } finally { fs.chmodSync(dirname(w.key), 0o700); }
   assert.equal(getCred('svc', 'api_key'), 'synthetic-perm');
+});
+
+// ---- LMCONN_KEY variant: runs on every platform, including Windows ---------------------------------------------------------
+
+test('env-key variant: legacy upgrade, round trip, tamper, wrong key, downgrade and migration with LMCONN_KEY only', async () => {
+  const key = randomBytes(32).toString('base64');
+  const w = use(world(), { LMCONN_KEY: key });
+  legacyDb(w, [['old', 'api_key', 'synthetic-env-old']], [['h', JSON.stringify(POLICY)]]);
+  assert.equal(getCred('old', 'api_key'), 'synthetic-env-old', 'legacy plaintext is readable before the first write');
+  setCred('svc', 'api_key', 'synthetic-env-new');
+  assert.ok(rows(w).every(r => r.value.startsWith('lmc1:')));
+  assert.ok(!holds(w, 'synthetic-env-new'));
+  assert.equal(getCred('old', 'api_key'), 'synthetic-env-old');
+  assert.equal(getCred('svc', 'api_key'), 'synthetic-env-new');
+  assert.deepEqual(policy('h'), POLICY);
+  const good = rows(w).find(r => r.service === 'svc').value;
+  raw(w, db => db.prepare("UPDATE creds SET value = ? WHERE service = 'svc'").run(flip(good)));
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), 'DECRYPT_FAILED');
+  raw(w, db => db.prepare("UPDATE creds SET value = ? WHERE service = 'svc'").run(good));
+  use(w, { LMCONN_KEY: randomBytes(32).toString('base64') });
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), 'KEY_MISMATCH');
+  assert.equal(codeOf(() => setCred('svc', 'x', 'y')), 'KEY_MISMATCH');
+  use(w);
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), process.platform === 'win32' ? 'STORE_SECURITY' : 'KEY_MISSING');
+  use(w, { LMCONN_KEY: key });
+  raw(w, db => { stripMarkers(db); db.prepare("UPDATE creds SET value = 'synthetic-planted'").run(); });
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), 'STORE_TAMPERED');
+  // Migration through the CLI: a legacy store is rewritten (rename, or VACUUM where the file cannot be replaced).
+  const m = world();
+  legacyDb(m, [['a', 'k', 'synthetic-env-migrate-a'], ['b', 'k', 'synthetic-env-migrate-b']]);
+  const done = lmconn(m, ['cred', 'encrypt-existing'], undefined, { LMCONN_KEY: key });
+  assert.equal(done.code, 0, done.out + done.err);
+  assert.equal(done.envelope.result.encrypted, 2);
+  assert.ok(!holds(m, 'synthetic-env-migrate'));
+  assert.equal(lmconn(m, ['cred', 'get', 'a', 'k', '--reveal'], undefined, { LMCONN_KEY: key }).envelope.result.value, 'synthetic-env-migrate-a');
 });
