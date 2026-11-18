@@ -1,8 +1,12 @@
-import { openDb, setCred, getCred, listCreds, deleteCred, dbPath } from './creds.js';
+import { openDb, closeDb, setCred, getCred, listCreds, deleteCred, dbPath } from './creds.js';
 import { emit, ok, emitFail } from './result.js';
 import { endpoint, origins, scopeText, redact, unsafeText, validSecret, securityError } from './oauth-security.js';
 import { secureStorePath } from './store-path.js';
 import { brokerMode, policy, putPolicy, refuseLegacyWrite, refuseReveal } from './credential-policy.js';
+import { encryptExisting, SAFE_CODES } from './crypto-store.js';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 const identity = [
   { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Service name' },
@@ -30,6 +34,9 @@ export const ops = [
   { name: 'cred oauth-store', access: 'write', description: 'Atomically store an OAuth2 token from JSON stdin and return its service handle', params: [
     { name: 'service', type: 'string', occurs: '1', positional: true, description: 'Provider/account service handle' },
     { name: 'stdin', type: 'boolean', occurs: '1', description: 'Read the token and metadata JSON from stdin' },
+  ] },
+  { name: 'cred encrypt-existing', access: 'write', description: 'Encrypt every legacy plaintext credential and mark the store encrypted-required; all also re-encrypts rows under older data keys and retires them', params: [
+    { name: 'all', type: 'boolean', occurs: '?', description: 'Re-encrypt every row under the active data key, then delete unused data keys and instance.key.prev' },
   ] },
 ];
 
@@ -115,12 +122,25 @@ function store(service, input, protectedStore) {
   } catch (err) { db.exec('ROLLBACK'); throw err; }
 }
 
+// Old plaintext may survive in earlier copies of the file, journals, backups and SSD blocks: say so, never claim erasure.
+function migrate(all) {
+  const file = dbPath(), legacy = join(homedir(), '.lmconnectors', 'creds.db');
+  if (existsSync(legacy) && legacy !== file) process.stderr.write(`lmconn: warning: the legacy store ${legacy} exists and is NOT migrated; it still holds plaintext.\n`);
+  const db = openDb();
+  const result = encryptExisting(db, { all });
+  closeDb(file); // the file was replaced; later opens must see the new one
+  if (result.rewritten) process.stderr.write('lmconn: warning: old plaintext may remain in earlier backups or copies of the database, old journal/WAL files and SSD blocks. Rotate any credential whose old file was ever copied.\n');
+  return result;
+}
+
 export async function run(args) {
   const [command, service, field, ...options] = args;
-  const usage = () => emitFail('USAGE', 'Usage: cred set <service> <field> (--value V | --env VAR | --stdin), oauth-store <service> --stdin, get <service> <field> [--reveal], delete <service> <field>, list, or path');
-  if (!['set', 'get', 'list', 'delete', 'path', 'oauth-store', 'store'].includes(command)) return usage();
+  const usage = () => emitFail('USAGE', 'Usage: cred set <service> <field> (--value V | --env VAR | --stdin), oauth-store <service> --stdin, get <service> <field> [--reveal], delete <service> <field>, encrypt-existing [--all], list, or path');
+  if (!['set', 'get', 'list', 'delete', 'path', 'oauth-store', 'store', 'encrypt-existing'].includes(command)) return usage();
   if (command === 'list' || command === 'path') {
     if (args.length !== 1) return usage();
+  } else if (command === 'encrypt-existing') {
+    if (!(args.length === 1 || (args.length === 2 && args[1] === '--all'))) return usage();
   } else if ((command === 'oauth-store' || command === 'store')) {
     if (!service || service.startsWith('--') || field !== '--stdin' || options.length) return usage();
   } else {
@@ -145,6 +165,8 @@ export async function run(args) {
       result = { provider: service, handle: service, kind: input.kind, stored: true };
     } else if (command === 'path') {
       result = { path: dbPath() };
+    } else if (command === 'encrypt-existing') {
+      result = migrate(args.length === 2);
     } else {
       let value;
       if (command === 'set') {
@@ -179,7 +201,7 @@ export async function run(args) {
     }
   } catch (err) {
     // Never echo underlying errors: they can contain credential input.
-    if (['CREDENTIAL_POLICY', 'STORE_SECURITY'].includes(err.code)) return emitFail(err.code, err.message);
+    if (SAFE_CODES.includes(err.code)) return emitFail(err.code, err.message);
     return emitFail(['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'CREDENTIAL_INPUT' : 'CREDENTIAL_ERROR',
       ['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'OAuth credential input is invalid' : 'Credential operation failed');
   }

@@ -3,7 +3,8 @@
 // Exercises the same contracts as the node test suite, against the binary:
 // JSON envelope on stdout, exit codes, sqlite cred store, full op schema.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,9 +15,12 @@ const dir = mkdtempSync(join(tmpdir(), 'lmconn-smoke-'));
 const db = join(dir, 'creds.db');
 const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
+// The key comes from LMCONN_KEY so the same checks pass on Windows (file-based keys fail closed there)
+// and never touch the runner's real ~/.config/lmconn.
+const key = randomBytes(32).toString('base64');
 let failures = 0;
 function run(args, input) {
-  const r = spawnSync(bin, args, { input, env: { ...process.env, LMCONN_DB: db }, encoding: 'utf8' });
+  const r = spawnSync(bin, args, { input, env: { ...process.env, LMCONN_DB: db, LMCONN_KEY: key }, encoding: 'utf8' });
   let envelope = null;
   try { envelope = JSON.parse(r.stdout.trim()); } catch { /* leave null */ }
   return { ...r, envelope };
@@ -37,7 +41,7 @@ const ops = r.envelope?.operations ?? (() => { try { return JSON.parse(r.stdout)
 check(`--cli-schema lists ${expectedSchema.operations.length} operations`, r.status === 0 && Array.isArray(ops) && ops.length === expectedSchema.operations.length,
   `got ${ops?.length}`);
 const opNames = new Set((ops ?? []).map((o) => o.name));
-check('--cli-schema lists OAuth, LDAP, SAML and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store', 'ldap_ping', 'ldap_bind', 'ldap_whoami', 'ldap_search', 'ldap_compare', 'saml_ping', 'saml_assertion', 'saml_verify'].every((n) => opNames.has(n)),
+check('--cli-schema lists OAuth, LDAP, SAML and import ops', ['oauth_authorize', 'oauth_refresh', 'oauth_status', 'oauth_device', 'oauth_list', 'cred_oauth_store', 'cred_store', 'cred_encrypt_existing', 'key_rotate', 'key_backup', 'ldap_ping', 'ldap_bind', 'ldap_whoami', 'ldap_search', 'ldap_compare', 'saml_ping', 'saml_assertion', 'saml_verify'].every((n) => opNames.has(n)),
   `names=${[...opNames].filter((n) => n.startsWith('ldap_') || n.startsWith('saml_')).join(',') || 'none'}`);
 
 r = run(['cred', 'set', 'smoke', 'api_key', '--stdin'], 'smoke-token-123');
@@ -51,6 +55,22 @@ check('cred list shows name only', r.status === 0 && r.envelope?.result?.some((c
 
 r = run(['cred', 'delete', 'smoke', 'api_key']);
 check('cred delete', r.status === 0 && r.envelope?.result?.deleted === true);
+
+r = run(['cred', 'set', 'smoke-raw', 'api_key', '--stdin'], 'smoke-at-rest-secret-xyz');
+check('encryption at rest: the secret is not in the database file', r.status === 0 && !readFileSync(db).includes('smoke-at-rest-secret-xyz'));
+r = run(['cred', 'get', 'smoke-raw', 'api_key', '--reveal']);
+check('encrypted value round-trips', r.status === 0 && r.envelope?.result?.value === 'smoke-at-rest-secret-xyz');
+r = run(['cred', 'encrypt-existing']);
+check('cred encrypt-existing is idempotent on an encrypted store', r.status === 0 && r.envelope?.result?.encrypted === 0 && r.envelope.result.rewritten === false, r.stdout.slice(0, 200));
+r = run(['key', 'rotate']);
+check('key rotate refuses an LMCONN_KEY (no key file to rewrite)', r.status === 1 && r.envelope?.error?.code === 'KEY_UNAVAILABLE', r.stdout.slice(0, 200));
+{
+  const target = join(mkdtempSync(join(tmpdir(), 'lmconn-smoke-key-')), 'key.bak');
+  r = run(['key', 'backup', '--to', target]);
+  if (process.platform === 'win32') check('key backup fails closed on Windows', r.status === 1 && r.envelope?.error?.code === 'STORE_SECURITY');
+  else check('key backup writes a 0600 file and never prints the key', r.status === 0 && existsSync(target) && (statSync(target).mode & 0o777) === 0o600 && !r.stdout.includes(key) && !r.stderr.includes(key));
+  rmSync(join(target, '..'), { recursive: true, force: true });
+}
 
 r = run(['cred', 'oauth-store', 'smoke-owner/github', '--stdin'], JSON.stringify({
   kind: 'oauth2', accessToken: 'synthetic-smoke-access', scopes: ['read:user'],

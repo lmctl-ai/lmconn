@@ -151,6 +151,45 @@
       ]
     },
     {
+      "name": "cred_encrypt_existing",
+      "access": "write",
+      "description": "Encrypt every legacy plaintext credential and mark the store encrypted-required; all also re-encrypts rows under older data keys and retires them",
+      "params": [
+        {
+          "name": "all",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Re-encrypt every row under the active data key, then delete unused data keys and instance.key.prev"
+        }
+      ]
+    },
+    {
+      "name": "key_rotate",
+      "access": "write",
+      "description": "Rotate the instance key (rewrap data keys, rows untouched); data starts a new data key for new writes instead",
+      "params": [
+        {
+          "name": "data",
+          "type": "boolean",
+          "occurs": "?",
+          "description": "Start a new data key for new writes (use with cred encrypt-existing --all after a suspected leak)"
+        }
+      ]
+    },
+    {
+      "name": "key_backup",
+      "access": "write",
+      "description": "Write a copy of the instance key to a new 0600 file outside the database directory; never prints the key",
+      "params": [
+        {
+          "name": "to",
+          "type": "string",
+          "occurs": "1",
+          "description": "New file to create (must not exist; not in the database directory or a sync folder)"
+        }
+      ]
+    },
+    {
       "name": "llm_providers",
       "access": "read",
       "description": "List providers and credential sources (never keys)",

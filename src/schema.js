@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 // JSON import attribute so the version survives bun --compile (no ../package.json in a binary).
 import pkg from '../package.json' with { type: 'json' };
 
-export const AREAS = ['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'ldap', 'saml', 'acp', 'mcp', 'npm'];
+export const AREAS = ['cred', 'key', 'llm', 'http', 'github', 'oauth', 'valkey', 'ldap', 'saml', 'acp', 'mcp', 'npm'];
 
 // Allowed param keys per @lmctl-ai/lmts/publish (anything else is a validation error).
 const PARAM_KEYS = ['name', 'type', 'occurs', 'default', 'enum', 'positional', 'items', 'description', 'aliases', 'cliOnly', 'docOnly', 'derived'];
@@ -69,6 +69,7 @@ export function normalizeOp(area, fragment) {
 export const AREA_LOADERS = {
   oauth: () => import('./cmd-oauth.js'),
   cred: () => import('./cmd-cred.js'),
+  key: () => import('./cmd-key.js'),
   llm: () => import('./cmd-llm.js'),
   http: () => import('./cmd-http.js'),
   github: () => import('./cmd-github.js'),

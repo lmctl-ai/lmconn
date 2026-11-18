@@ -6,6 +6,7 @@
 import { emit, ok, emitFail } from './result.js';
 import { AREA_LOADERS } from './schema.js';
 import { brokerMode, policy } from './credential-policy.js';
+import { SAFE_CODES } from './crypto-store.js';
 import { openDb } from './creds.js';
 // JSON import attribute: works under Node >= 22.5 and gets embedded into
 // bun --compile binaries, where a runtime readFileSync of ../package.json fails.
@@ -13,7 +14,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.0.0';
 
-const AREAS = new Set(['cred', 'llm', 'http', 'github', 'oauth', 'valkey', 'ldap', 'saml', 'acp', 'mcp', 'npm']);
+const AREAS = new Set(['cred', 'key', 'llm', 'http', 'github', 'oauth', 'valkey', 'ldap', 'saml', 'acp', 'mcp', 'npm']);
 
 const USAGE = [
   'lmconn — connectors for lmscript',
@@ -21,7 +22,8 @@ const USAGE = [
   'usage:',
   '  lmconn --version',
   '  lmconn --cli-schema --json        print the cli.schema.v1 document',
-  '  lmconn cred <set|get|list|delete|oauth-store|store> ...',
+  '  lmconn cred <set|get|list|delete|oauth-store|store|encrypt-existing> ...',
+  '  lmconn key <rotate|backup> ...',
   '  lmconn llm <providers|chat|probe> ...',
   '  lmconn http <request> ...',
   '  lmconn github <...> ...',
@@ -65,7 +67,7 @@ export async function main(argv) {
   try {
     // Protected handles are only usable by the origin-checking, receipt-only HTTP adapter.
     // Generic provider/GitHub adapters retain their legacy result contracts, so may not consume them.
-    if (brokerMode() && !['cred', 'http', 'oauth', 'npm'].includes(area)) return emitFail('CREDENTIAL_POLICY', 'Broker mode exposes only credential and bound HTTP operations');
+    if (brokerMode() && !['cred', 'key', 'http', 'oauth', 'npm'].includes(area)) return emitFail('CREDENTIAL_POLICY', 'Broker mode exposes only credential and bound HTTP operations');
     const protectedHandle = service => typeof service === 'string' && policy(service)?.noReveal;
     if (area === 'github' && protectedHandle('github')) return emitFail('CREDENTIAL_POLICY', 'Protected handles require the bound HTTP adapter');
     if (area === 'llm' && argv[1] === 'chat' && protectedHandle(argv[2])) return emitFail('CREDENTIAL_POLICY', 'Protected handles require the bound HTTP adapter');
@@ -76,7 +78,7 @@ export async function main(argv) {
     const mod = await AREA_LOADERS[area]();
     return await mod.run(argv.slice(1));
   } catch (err) {
-    if (['CREDENTIAL_POLICY', 'STORE_SECURITY'].includes(err.code)) return emitFail(err.code, err.message);
+    if (SAFE_CODES.includes(err.code)) return emitFail(err.code, err.message);
     if (err?.code === 'ERR_MODULE_NOT_FOUND') {
       return emitFail('NOT_IMPLEMENTED', `area not implemented yet: ${area}`);
     }
