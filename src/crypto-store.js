@@ -361,7 +361,7 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
       if (!staleIds.has(`${row.service}\0${row.field}`)) return row.value;
       return sealValue(dek, row.service, row.field, isCipher(row.value) ? openValue(db, row.service, row.field, row.value) : row.value);
     };
-    if (inPlace) {
+    const runInPlace = () => {
       const update = db.prepare('UPDATE creds SET value = ? WHERE service = ? AND field = ?');
       for (const row of rows) if (staleIds.has(`${row.service}\0${row.field}`)) update.run(convert(row), row.service, row.field);
       seal(db, keys);
@@ -371,7 +371,8 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
       db.exec('VACUUM');
       retire();
       return { ...result, rewritten: true };
-    }
+    };
+    if (inPlace) return runInPlace();
     const temp = path.join(path.dirname(file), `.${path.basename(file)}.migrate.${process.pid}.${crypto.randomBytes(6).toString('hex')}`);
     try {
       fs.closeSync(fs.openSync(temp, 'wx', 0o600));
@@ -395,6 +396,8 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
       syncDirectory(path.dirname(file));
     } catch (err) {
       try { fs.unlinkSync(temp); } catch { /* not created */ }
+      // Windows cannot rename over a file this process holds open: fall back to one transaction plus VACUUM.
+      if (['EPERM', 'EBUSY', 'EACCES'].includes(err.code)) return runInPlace();
       throw err;
     }
     finish('ROLLBACK'); // releases the lock on the replaced file; nothing was written to it

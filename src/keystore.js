@@ -12,6 +12,7 @@ import { secureKeyDirectory } from './store-path.js';
 
 const keyError = (code, message) => securityError(message, code);
 const insecure = (message = 'Key file is not private or safe') => securityError(message, 'STORE_SECURITY');
+const WINDOWS_KEY_MESSAGE = 'No encryption key: file-based keys are not supported on Windows yet, so set LMCONN_KEY to a base64 32-byte key (or LMCONN_ALLOW_PLAINTEXT=1 to keep a legacy plaintext store).';
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 // LMCONN_KEY is read once and removed from process.env so no child inherits it.
@@ -90,7 +91,7 @@ export function loadKeys(dbFile) {
   if (envKey?.error) throw keyError('KEY_INVALID', 'LMCONN_KEY must be 32 bytes of strict base64');
   if (envKey) return { current: entry(envKey.key), prev: null, source: 'env', file: null };
   const file = keyFilePath();
-  if (process.platform === 'win32') throw Object.assign(insecure('File-based keys need native Windows ACL support; use LMCONN_KEY'), { windowsFile: true });
+  if (process.platform === 'win32') throw Object.assign(insecure(WINDOWS_KEY_MESSAGE), { windowsFile: true });
   if (dbFile && overlapping(file, dbFile)) throw insecure('The key directory must not be inside, equal to or contain the database directory');
   const key = readKeyFile(file);
   if (!key) return null;
@@ -120,7 +121,7 @@ function linkSecret(file, bytes) {
 
 // Write commands only. Creates the key file (never a new key while a store holds ciphertext: the caller checks that).
 export function createKeys(dbFile) {
-  if (process.platform === 'win32') throw Object.assign(insecure('File-based keys need native Windows ACL support; use LMCONN_KEY'), { windowsFile: true });
+  if (process.platform === 'win32') throw Object.assign(insecure(WINDOWS_KEY_MESSAGE), { windowsFile: true });
   const file = keyFilePath();
   if (dbFile && overlapping(file, dbFile)) throw insecure('The key directory must not be inside, equal to or contain the database directory');
   let created = false;

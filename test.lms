@@ -4,6 +4,6 @@ result = system(["node", "scripts/sync-lmmock.mjs", "--check"], {timeoutMs:60000
 print(result.stdout); print(result.stderr);
 assert(result.code == 0, "fixture lock verification failed");
 # Node's test runner handles discovery consistently on Windows and Unix.
-result = system(["node", "--test", "test/*.test.js"], {timeoutMs:600000});
+result = system(["node", "--test", "--import", "./test/setup-env.mjs", "test/*.test.js"], {timeoutMs:600000});
 print(result.stdout); print(result.stderr);
 assert(result.code == 0, "connector tests failed");
