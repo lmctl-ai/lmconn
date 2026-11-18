@@ -723,3 +723,121 @@ test('LMCONN_ALLOW_PLAINTEXT=1 warns on every plaintext write; the next encrypte
   assert.ok(rows(w).every(r => r.value.startsWith('lmc1:')));
   assert.equal(getCred('svc', 'a'), 'synthetic-plain-a');
 });
+
+// ---- review round 3 -------------------------------------------------------------------------------------------------------
+
+const records = w => (fs.existsSync(dirname(w.key)) ? fs.readdirSync(dirname(w.key)).filter(f => f.startsWith('sealed.')) : []);
+
+test('a rolled-back or crashed sealing transaction leaves no sealed record and the legacy store keeps working', () => {
+  const w = use(world());
+  legacyDb(w, [['old', 'api_key', 'synthetic-old']]);
+  const db = openDb();
+  db.exec('BEGIN IMMEDIATE');
+  setCred('svc', 'f', 'synthetic-rolled-back');
+  assert.deepEqual(records(w), [], 'nothing external is written before the commit');
+  db.exec('ROLLBACK');
+  assert.deepEqual(records(w), []);
+  assert.equal(getCred('old', 'api_key'), 'synthetic-old', 'still a readable legacy store, not tampered');
+  assert.equal(rows(w)[0].value, 'synthetic-old');
+  setCred('svc', 'f', 'synthetic-after');
+  assert.equal(records(w).length, 1, 'the record appears once the seal is committed');
+  assert.equal(getCred('old', 'api_key'), 'synthetic-old');
+  // Crash: a child process dies mid-transaction.
+  const c = world();
+  legacyDb(c, [['old', 'api_key', 'synthetic-old-crash']]);
+  const program = `import { openDb, setCred } from ${JSON.stringify(new URL('../src/creds.js', import.meta.url).href)};
+    const db = openDb(); db.exec('BEGIN IMMEDIATE'); setCred('svc', 'f', 'synthetic-crash'); process.exit(7);`;
+  const crashed = spawnSync(process.execPath, ['--input-type=module', '-e', program], { env: childEnv(c), encoding: 'utf8' });
+  assert.equal(crashed.status, 7, crashed.stderr);
+  assert.deepEqual(records(c), []);
+  const read = lmconn(c, ['cred', 'get', 'old', 'api_key', '--reveal']);
+  assert.equal(read.envelope.result.value, 'synthetic-old-crash');
+  assert.equal(lmconn(c, ['cred', 'set', 'svc', 'f', '--stdin'], 'synthetic-ok').code, 0);
+  assert.equal(records(c).length, 1);
+  assert.equal(lmconn(c, ['cred', 'get', 'old', 'api_key', '--reveal']).envelope.result.value, 'synthetic-old-crash');
+});
+
+test('commands that own an outer transaction write the record right after their commit', () => {
+  const w = world();
+  const r = lmconn(w, ['cred', 'oauth-store', 'o', '--stdin'], { kind: 'oauth2', accessToken: 'synthetic-a', scopes: ['read'], owner: 'x', source: 'y' });
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.equal(records(w).length, 1);
+});
+
+test('a missing record warns on read, is regenerated on the next write, and a moved database leaves the old record alone', async () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-missing');
+  const [name] = records(w);
+  fs.unlinkSync(join(dirname(w.key), name));
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), null, 'the store still works');
+  closeDb(w.db); resetKeyCache();
+  const warning = await stderrOf(() => { getCred('svc', 'api_key'); getCred('svc', 'api_key'); });
+  assert.equal((warning.match(/not externally proven/g) || []).length, 1, 'one warning, not one per read');
+  assert.deepEqual(records(w), [], 'a read never writes the record');
+  setCred('svc', 'other', 'synthetic-regenerated');
+  assert.deepEqual(records(w), [name], 'same path, same record name');
+  assert.equal(await stderrOf(() => getCred('svc', 'api_key')), '');
+  const moved = { ...world(), cfg: w.cfg, key: w.key };
+  fs.mkdirSync(dirname(moved.db), { mode: 0o700 });
+  fs.copyFileSync(w.db, moved.db);
+  use(moved);
+  assert.match(await stderrOf(() => getCred('svc', 'api_key')), /not externally proven/);
+  setCred('svc', 'third', 'synthetic-moved');
+  assert.equal(records(w).length, 2, 'the moved copy got its own record');
+  assert.ok(records(w).includes(name), 'the old record was not touched');
+});
+
+test('LMCONN_KEY mode: first sealing names the unauthenticated policy documents it adopts', async () => {
+  const w = use(world(), { LMCONN_KEY: randomBytes(32).toString('base64') });
+  legacyDb(w, [['old', 'api_key', 'synthetic-old']], [['handle-one', JSON.stringify(POLICY)], ['handle-two', JSON.stringify(POLICY)]]);
+  const notice = await stderrOf(() => setCred('svc', 'f', 'synthetic-env'));
+  assert.match(notice, /adopted 2 unauthenticated policy document\(s\) \(handle-one, handle-two\)/);
+  assert.match(notice, /LMCONN_KEY_FILE/);
+  assert.equal(fs.existsSync(dirname(w.key)), false, 'no key directory, hence no record');
+  assert.deepEqual(policy('handle-one'), POLICY);
+});
+
+test('a plaintext row in an encrypted store names its service and field and the repair', () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-real');
+  raw(w, db => { db.exec('DROP TRIGGER lmconn_sealed_insert; DROP TRIGGER lmconn_sealed_update'); db.prepare("INSERT INTO creds VALUES ('planted-svc', 'planted-field', 'synthetic-planted', 'now')").run(); });
+  let message = '';
+  try { getCred('planted-svc', 'planted-field'); } catch (err) { message = err.message; assert.equal(err.code, 'STORE_TAMPERED'); }
+  assert.match(message, /planted-svc/);
+  assert.match(message, /planted-field/);
+  assert.match(message, /cred delete/);
+  assert.doesNotMatch(message, /synthetic-planted|backup/);
+  const r = lmconn(w, ['cred', 'encrypt-existing']);
+  assert.equal(r.envelope.error.code, 'STORE_TAMPERED');
+  assert.match(r.envelope.error.message, /planted-svc/);
+  assert.equal(lmconn(w, ['cred', 'delete', 'planted-svc', 'planted-field']).code, 0, 'the named repair works');
+  assert.equal(getCred('svc', 'api_key'), 'synthetic-real');
+});
+
+test('a writer that waits out the busy timeout gets the retryable STORE_BUSY', () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-busy');
+  closeDb(w.db);
+  const holder = new DatabaseSync(w.db);
+  holder.exec('BEGIN IMMEDIATE');
+  try {
+    const r = lmconn(w, ['cred', 'set', 'svc', 'other', '--stdin'], 'synthetic-blocked', { LMCONN_BUSY_TIMEOUT_MS: '200' });
+    assert.equal(r.code, 1);
+    assert.equal(r.envelope.error.code, 'STORE_BUSY');
+    assert.ok(!(r.out + r.err).includes('synthetic-blocked'));
+  } finally { holder.exec('ROLLBACK'); holder.close(); }
+  assert.equal(lmconn(w, ['cred', 'set', 'svc', 'other', '--stdin'], 'synthetic-free').code, 0);
+});
+
+test('an unreadable key directory is reported as a key directory permission problem', { skip: (!posix || isRoot) && 'needs an unprivileged POSIX user' }, () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-perm');
+  fs.chmodSync(dirname(w.key), 0o000);
+  try {
+    let error;
+    try { getCred('svc', 'api_key'); } catch (err) { error = err; }
+    assert.equal(error?.code, 'STORE_SECURITY');
+    assert.match(error.message, /key directory is not accessible \(permission problem\)/);
+  } finally { fs.chmodSync(dirname(w.key), 0o700); }
+  assert.equal(getCred('svc', 'api_key'), 'synthetic-perm');
+});

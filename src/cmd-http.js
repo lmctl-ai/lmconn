@@ -7,6 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { emit, ok, emitFail } from './result.js';
 import { getCred, setCred, deleteCred, openDb } from './creds.js';
+import { afterCommit } from './crypto-store.js';
 import { endpoint, tokenResult, redact as redactValue } from './oauth-security.js';
 import { authorizeOrigin, checkRefresh, policy } from './credential-policy.js';
 
@@ -70,6 +71,7 @@ export async function refreshOAuth(service, fetchImpl = globalThis.fetch, timeou
     if (data.token_type !== undefined) setCred(service, 'oauth_token_type', data.token_type, db);
     if (data.scope !== undefined) setCred(service, 'oauth_scope', data.scope, db);
     db.exec('COMMIT');
+    afterCommit(db);
   } catch (err) { db.exec('ROLLBACK'); throw err; }
   return data.access_token;
 }

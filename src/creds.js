@@ -46,7 +46,8 @@ export function openDb(path = dbPath()) {
     refuseWindowsProtected(db);
     const st = lstatSync(secured.file);
     if (st.dev !== secured.identity.dev || st.ino !== secured.identity.ino) throw new Error('Credential store identity changed');
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON; PRAGMA journal_mode=DELETE;');
+    // LMCONN_BUSY_TIMEOUT_MS: how long a command waits for another writer before STORE_BUSY (default 5 s).
+    db.exec(`PRAGMA busy_timeout=${Number.parseInt(process.env.LMCONN_BUSY_TIMEOUT_MS, 10) || 5000}; PRAGMA secure_delete=ON; PRAGMA journal_mode=DELETE;`);
     db.exec(SCHEMA);
     migrateSchema(db);
     registerDb(db, secured.file);

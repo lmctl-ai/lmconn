@@ -6,7 +6,7 @@
 import { emit, ok, emitFail } from './result.js';
 import { AREA_LOADERS } from './schema.js';
 import { brokerMode, policy } from './credential-policy.js';
-import { SAFE_CODES } from './crypto-store.js';
+import { SAFE_CODES, isBusy } from './crypto-store.js';
 import { openDb } from './creds.js';
 // JSON import attribute: works under Node >= 22.5 and gets embedded into
 // bun --compile binaries, where a runtime readFileSync of ../package.json fails.
@@ -79,6 +79,7 @@ export async function main(argv) {
     return await mod.run(argv.slice(1));
   } catch (err) {
     if (SAFE_CODES.includes(err.code)) return emitFail(err.code, err.message);
+    if (isBusy(err)) return emitFail('STORE_BUSY', 'Credential store is busy; retry');
     if (err?.code === 'ERR_MODULE_NOT_FOUND') {
       return emitFail('NOT_IMPLEMENTED', `area not implemented yet: ${area}`);
     }

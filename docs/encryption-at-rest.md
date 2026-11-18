@@ -79,7 +79,8 @@ Per value: `lmc1:<keyId>:<b64 nonce 12 B>:<b64 ciphertext||tag 16 B>`.
   an attacker restoring value and counter together (see Rollback above).
 - DEK wrap: AES-256-GCM with the IK, AAD `data_keys` and the DEK id.
 - Errors: `DECRYPT_FAILED`, `KEY_MISSING`, `KEY_MISMATCH`, `KEY_INVALID`, `KEY_UNAVAILABLE`, `STORE_TAMPERED`,
-  `STORE_SECURITY`, `STORE_VERSION`. No key, secret or ciphertext appears in any message, stdout or stderr.
+  `STORE_SECURITY`, `STORE_VERSION`, `STORE_BUSY` (another writer held the store past the busy timeout, 5 s by
+  default, `LMCONN_BUSY_TIMEOUT_MS`; retry). No key, secret or ciphertext appears in any message, stdout or stderr.
 
 ### Sealing: no downgrade
 
@@ -94,8 +95,20 @@ HMAC (key = HKDF(IK, "lmconn sealed")) over that realpath. It is written when th
 rotation, and is not written for `LMCONN_KEY` (no key directory) or on Windows. A database writer who cannot touch the
 key directory therefore cannot turn a sealed store back into a legacy one, even by dropping the triggers, deleting
 `meta` and `data_keys`, resetting `user_version` and planting plaintext. A record that does not verify is `KEY_MISMATCH`.
-Whoever can write the key directory is the same principal as the key (out of scope). With `LMCONN_KEY` only, the seal
-rests on the in-database rules above.
+Whoever can write the key directory is the same principal as the key (out of scope).
+
+The record is written only **after** the sealing transaction has committed, never inside it, so a rollback or a crash
+cannot leave a record for a store that is still legacy. A crash between the commit and the record write leaves a sealed
+database without a record. If the store is sealed inside the database and the key lives in a key directory, every write
+command recreates a missing record (idempotent; a moved database gets a fresh record at its new path and the old record
+is left alone), and a read command prints one warning that the store is sealed but not externally proven.
+
+**`LMCONN_KEY` mode cannot prove a store was ever sealed.** With only `LMCONN_KEY` there is no key directory and no
+record, so the seal rests on the in-database rules above. An attacker with write access to the file can strip the
+markers, delete `data_keys`, replace every value with plaintext and plant policy documents; the next legitimate write
+sees a legacy store, adopts the planted policy documents and signs them. lmconn cannot prevent that. When a first
+sealing under `LMCONN_KEY` adopts unauthenticated policy documents it prints a notice naming how many and which
+services; read it. Use `LMCONN_KEY_FILE` (or the default key file) for any long-lived store.
 
 There is no half-plaintext state: the first encrypted write into a store that still has legacy plaintext rows encrypts
 all of them in place in the same transaction, seals the store and prints a notice (old plaintext may remain in free

@@ -1,7 +1,7 @@
 // key area: rotate the instance key or its data keys, back the key up. Key bytes are never printed.
 import { openDb, dbPath } from './creds.js';
 import { emit, ok, emitFail } from './result.js';
-import { rotateKey, rotateData, SAFE_CODES } from './crypto-store.js';
+import { rotateKey, rotateData, isBusy, SAFE_CODES } from './crypto-store.js';
 import { loadKeys, backupKey } from './keystore.js';
 
 export const ops = [
@@ -38,6 +38,7 @@ export async function run(args) {
   } catch (err) {
     // Never echo underlying errors: they can contain paths or key material.
     if (SAFE_CODES.includes(err.code) || err.code === 'USAGE') return emitFail(err.code, err.message);
+    if (isBusy(err)) return emitFail('STORE_BUSY', 'Credential store is busy; retry');
     return emitFail('KEY_ERROR', 'Key operation failed');
   }
   emit(ok(result));

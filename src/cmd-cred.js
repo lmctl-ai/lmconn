@@ -3,7 +3,7 @@ import { emit, ok, emitFail } from './result.js';
 import { endpoint, origins, scopeText, redact, unsafeText, validSecret, securityError } from './oauth-security.js';
 import { secureStorePath } from './store-path.js';
 import { brokerMode, policy, putPolicy, refuseLegacyWrite, refuseReveal } from './credential-policy.js';
-import { encryptExisting, SAFE_CODES } from './crypto-store.js';
+import { encryptExisting, afterCommit, isBusy, SAFE_CODES } from './crypto-store.js';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -119,6 +119,7 @@ function store(service, input, protectedStore) {
     }
     putPolicy(service, input.binding || { noReveal: false, kind: 'oauth2', issuer: null, owner: input.owner, origins: [], refresh: null }, db);
     db.exec('COMMIT');
+    afterCommit(db);
   } catch (err) { db.exec('ROLLBACK'); throw err; }
 }
 
@@ -202,6 +203,7 @@ export async function run(args) {
   } catch (err) {
     // Never echo underlying errors: they can contain credential input.
     if (SAFE_CODES.includes(err.code)) return emitFail(err.code, err.message);
+    if (isBusy(err)) return emitFail('STORE_BUSY', 'Credential store is busy; retry');
     return emitFail(['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'CREDENTIAL_INPUT' : 'CREDENTIAL_ERROR',
       ['oauth-store', 'store'].includes(command) && err?.message === 'invalid input' ? 'OAuth credential input is invalid' : 'Credential operation failed');
   }

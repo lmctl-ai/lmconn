@@ -11,9 +11,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { securityError } from './oauth-security.js';
-import { loadKeys, createKeys, stageRotation, removePrevKey, strictBase64, sealedRecordExists, sealedRecordValid, writeSealedRecord } from './keystore.js';
+import { loadKeys, createKeys, stageRotation, removePrevKey, strictBase64, sealedRecordExists, sealedRecordValid, writeSealedRecord, recordCapable } from './keystore.js';
 
-export const SAFE_CODES = ['CREDENTIAL_POLICY', 'STORE_SECURITY', 'STORE_TAMPERED', 'STORE_VERSION', 'KEY_MISSING', 'KEY_INVALID', 'KEY_UNAVAILABLE', 'KEY_MISMATCH', 'DECRYPT_FAILED'];
+export const isBusy = err => err?.errcode === 5 || /database is locked/i.test(String(err?.message));
+export const SAFE_CODES = ['STORE_BUSY', 'CREDENTIAL_POLICY', 'STORE_SECURITY', 'STORE_TAMPERED', 'STORE_VERSION', 'KEY_MISSING', 'KEY_INVALID', 'KEY_UNAVAILABLE', 'KEY_MISMATCH', 'DECRYPT_FAILED'];
 const SCHEMA_VERSION = 2;
 const fail = (code, message) => securityError(message, code);
 const tampered = (message = 'Credential store failed its integrity check') => fail('STORE_TAMPERED', message);
@@ -58,13 +59,36 @@ const nowIso = () => new Date().toISOString();
 // Sealed state never lives only inside the database: data keys, ciphertext and the sealed record in the key
 // directory all count, so an attacker who can write the file (but not the key directory) cannot strip it.
 export function storeState(db) {
-  const sealed = !!(getMeta(db, 'encrypted_required') !== null || getMeta(db, 'policy_set_mac') !== null ||
+  const inDb = !!(getMeta(db, 'encrypted_required') !== null || getMeta(db, 'policy_set_mac') !== null ||
     db.prepare('PRAGMA user_version').get().user_version >= SCHEMA_VERSION ||
     db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'lmconn_sealed_insert'").get() ||
     db.prepare('SELECT 1 FROM data_keys LIMIT 1').get() ||
-    db.prepare("SELECT 1 FROM creds WHERE substr(value, 1, 5) = 'lmc1:' LIMIT 1").get() ||
-    sealedRecordExists(fileOf(db)));
-  return { sealed, required: sealed || process.env.LMCONN_STORE_MODE === 'broker' };
+    db.prepare("SELECT 1 FROM creds WHERE substr(value, 1, 5) = 'lmc1:' LIMIT 1").get());
+  const sealed = inDb || sealedRecordExists(fileOf(db));
+  return { sealed, inDb, required: sealed || process.env.LMCONN_STORE_MODE === 'broker' };
+}
+
+// The external record is written only after the sealing transaction has committed, never inside it: a rollback or a
+// crash must not leave a record behind for a store that is still legacy. A crash between commit and this call leaves a
+// sealed database without a record; the next write command regenerates it (idempotent, same path-derived name).
+function ensureRecord(db, keys) {
+  if (db.isTransaction !== false || !storeState(db).inDb) return;
+  writeSealedRecord(keys, fileOf(db));
+}
+// Callers that own an outer transaction call this right after their COMMIT.
+export function afterCommit(db) {
+  try {
+    if (db.isTransaction !== false) return;
+    const keys = loadKeys(fileOf(db));
+    if (keys) ensureRecord(db, keys);
+  } catch { /* committed already; the next write command regenerates the record */ }
+}
+const notProven = new WeakSet();
+function warnUnproven(db) {
+  const state = storeState(db);
+  if (!state.inDb || !recordCapable() || notProven.has(db) || sealedRecordExists(fileOf(db))) return;
+  notProven.add(db);
+  warn('the store is sealed but its external sealed record is missing, so it is not externally proven; the next write command recreates it.');
 }
 
 // ---- primitives -------------------------------------------------------------------------------
@@ -172,6 +196,7 @@ export function verifyPolicies(db) {
 function verifyOnce(db) {
   const state = storeState(db);
   if (!state.required) return;
+  warnUnproven(db);
   const rows = db.prepare('SELECT service, document, mac FROM credential_policy ORDER BY service').all();
   const setMac = getMeta(db, 'policy_set_mac');
   if (!rows.length && !setMac && !state.sealed) return;
@@ -193,13 +218,14 @@ function atomic(db, work) {
   catch (err) { db.exec(nested ? 'ROLLBACK TO lmatomic; RELEASE lmatomic' : 'ROLLBACK'); throw err; }
 }
 
-function seal(db, keys, file = fileOf(db)) {
+function seal(db, keys) {
   atomic(db, () => {
+    const adopted = db.prepare('SELECT service FROM credential_policy WHERE mac IS NULL').all().map(r => r.service);
+    if (adopted.length && keys.source === 'env') warn(`LMCONN_KEY mode cannot prove this store was never tampered with: sealing adopted ${adopted.length} unauthenticated policy document(s) (${adopted.join(', ')}) and signed them. Check them, and prefer LMCONN_KEY_FILE for a long-lived store.`);
     setMeta(db, 'encrypted_required', '1');
     remacPolicies(db, keys);
     db.exec(SEAL_TRIGGERS);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    writeSealedRecord(keys, file);
   });
 }
 
@@ -229,8 +255,8 @@ export function prepareWrite(db, { forceEncrypt = false, upgrade = true } = {}) 
   if (rotationPending(db, keys)) throw fail('KEY_MISMATCH', 'Key rotation is incomplete; run lmconn key rotate to finish it');
   const canary = db.prepare('SELECT id, wrapped, ik_id FROM data_keys LIMIT 1').get();
   if (canary) unwrapDek(canary, keys); // a wrong key fails here, before it can create a mixed store
-  if (state.sealed || !upgrade) return { keys, dek: activeDek(db, keys), plaintext: false };
-  return atomic(db, () => {
+  if (state.sealed || !upgrade) { const dek = activeDek(db, keys); if (state.sealed) ensureRecord(db, keys); return { keys, dek, plaintext: false }; }
+  const result = atomic(db, () => {
     const dek = activeDek(db, keys);
     const legacy = db.prepare("SELECT service, field, value FROM creds WHERE substr(value, 1, 5) != 'lmc1:'").all();
     const update = db.prepare('UPDATE creds SET value = ? WHERE service = ? AND field = ?');
@@ -240,6 +266,8 @@ export function prepareWrite(db, { forceEncrypt = false, upgrade = true } = {}) 
     if (legacy.length) warn(`${legacy.length} plaintext credential(s) were encrypted in place and the store is now sealed (no plaintext allowed). Run cred encrypt-existing to also rewrite the file and drop old plaintext pages.`);
     return { keys, dek, plaintext: false };
   });
+  ensureRecord(db, keys);
+  return result;
 }
 
 const sealValue = (dek, service, field, text) =>
@@ -287,7 +315,7 @@ export function readValue(db, service, field, settled = false) {
   if (state.required) verifyPolicies(db);
   if (isCipher(row.value)) return openValue(db, service, field, row.value);
   if (state.required && !settled && settle(db)) return readValue(db, service, field, true);
-  if (state.required) throw tampered('Plaintext credential in an encrypted store; run cred encrypt-existing or restore a backup');
+  if (state.required) throw tampered(`Plaintext value in an encrypted store at service ${JSON.stringify(service)}, field ${JSON.stringify(field)}; repair with cred delete SERVICE FIELD or overwrite it with cred set`);
   return row.value;
 }
 
@@ -315,7 +343,7 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
     const { keys, dek } = prepareWrite(db, { forceEncrypt: true, upgrade: false });
     const rows = db.prepare('SELECT service, field, value, updated_at FROM creds ORDER BY service, field').all();
     const plain = rows.filter(r => !isCipher(r.value));
-    if (wasSealed && plain.length) throw tampered('Plaintext credential in an encrypted store; restore a backup');
+    if (wasSealed && plain.length) throw tampered(`Plaintext credential in an encrypted store: service ${JSON.stringify(plain[0].service)}, field ${JSON.stringify(plain[0].field)}; delete it (cred delete SERVICE FIELD) and set it again`);
     const stale = all ? rows.filter(r => isCipher(r.value) && cipherKeyId(r.value) !== dek.id) : [];
     const result = { total: rows.length, encrypted: plain.length, reencrypted: stale.length, alreadyEncrypted: rows.length - plain.length - stale.length, rewritten: false };
     const retire = () => { if (all && !rotationPending(db, keys)) removePrevKey(keys); };
@@ -339,6 +367,7 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
       seal(db, keys);
       if (all) db.prepare('DELETE FROM data_keys WHERE active = 0 AND id NOT IN (SELECT DISTINCT substr(value, 6, 16) FROM creds)').run();
       finish('COMMIT');
+      writeSealedRecord(keys, file);
       db.exec('VACUUM');
       retire();
       return { ...result, rewritten: true };
@@ -358,7 +387,7 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
           if (k.active || used.has(k.id)) out.prepare('INSERT INTO data_keys (id, wrapped, ik_id, created, active) VALUES (?, ?, ?, ?, ?)').run(k.id, k.wrapped, k.ik_id, k.created, k.active);
         }
         for (const p of db.prepare('SELECT service, document FROM credential_policy').all()) out.prepare('INSERT INTO credential_policy (service, document, mac) VALUES (?, ?, NULL)').run(p.service, p.document);
-        seal(out, keys, file);
+        seal(out, keys);
         out.exec('COMMIT');
       } finally { out.close(); }
       syncFile(temp);
@@ -369,6 +398,7 @@ export function encryptExisting(db, { all = false, inPlace = false } = {}) {
       throw err;
     }
     finish('ROLLBACK'); // releases the lock on the replaced file; nothing was written to it
+    writeSealedRecord(keys, file); // after the new file is committed and in place
     if (all && !db.prepare('SELECT 1 FROM data_keys WHERE ik_id != ?').get(keys.current.id)) removePrevKey(keys);
     return { ...result, rewritten: true };
   } catch (err) {
@@ -395,7 +425,7 @@ export function rotateKey(db, hook = () => {}) {
     if (getMeta(db, 'policy_set_mac') !== null) remacPolicies(db, keys);
     db.exec('COMMIT');
   } catch (err) { db.exec('ROLLBACK'); throw err; }
-  writeSealedRecord(keys, fileOf(db));
+  if (storeState(db).inDb) writeSealedRecord(keys, fileOf(db));
   hook('db-committed');
 }
 

@@ -189,8 +189,13 @@ function sealedPath(dbFile) {
 }
 export function sealedRecordExists(dbFile) {
   if (process.platform === 'win32' || !dbFile) return false;
-  try { fs.lstatSync(sealedPath(dbFile).file); return true; } catch (err) { if (err.code === 'ENOENT') return false; throw insecure(); }
+  try { fs.lstatSync(sealedPath(dbFile).file); return true; } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw insecure('The key directory is not accessible (permission problem); fix its permissions or ownership');
+  }
 }
+// True when the key lives in a key directory (not LMCONN_KEY, not Windows): the only case that has a sealed record.
+export const recordCapable = () => { consumeEnvKey(); return process.platform !== 'win32' && !envKey; };
 export function sealedRecordValid(keys, dbFile) {
   const { real, file } = sealedPath(dbFile);
   let text;

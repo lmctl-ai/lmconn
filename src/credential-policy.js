@@ -1,6 +1,6 @@
 import { openDb, getCred } from './creds.js';
 import { endpoint, origins, securityError } from './oauth-security.js';
-import { verifyPolicies, writePolicy } from './crypto-store.js';
+import { verifyPolicies, writePolicy, afterCommit } from './crypto-store.js';
 export function brokerMode() {
   const mode = process.env.LMCONN_STORE_MODE;
   if (mode && !['legacy', 'broker'].includes(mode)) throw securityError('Unknown credential store mode');
@@ -48,6 +48,6 @@ export function authorizeOrigin(service, value, db = openDb()) {
       putPolicy(service, p, db);
     }
     if (!p.origins.includes(origin)) throw securityError('Authenticated origin is outside the credential binding');
-    db.exec('COMMIT'); return p;
+    db.exec('COMMIT'); afterCommit(db); return p;
   } catch (err) { db.exec('ROLLBACK'); throw err; }
 }

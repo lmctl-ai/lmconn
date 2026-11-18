@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { getCred, setCred, deleteCred, openDb } from './creds.js';
+import { afterCommit } from './crypto-store.js';
 import { emit, ok, emitFail } from './result.js';
 // Vendor endpoints/scopes mined from n8n's credential definitions; JSON
 // import attribute so the table is embedded in bun-compiled binaries.
@@ -114,6 +115,7 @@ function save(service, cfg, { token, expiresAt }, refresh, guard = () => {}) {
     if (token.scope !== undefined) setCred(service, 'oauth_scope', token.scope, db);
     guard();
     db.exec('COMMIT');
+    afterCommit(db);
   } catch (err) { db.exec('ROLLBACK'); throw err; }
   return safeMeta(service, { service, expiresAt, hasRefreshToken: !!getCred(service, 'oauth_refresh_token'), scope: getCred(service, 'oauth_scope') || '' });
 }
