@@ -18,8 +18,14 @@ Not protected:
 - Names: service and field names, `credential_policy` documents (origins and flags, no secrets) and timestamps
   are not encrypted. They are authenticated once the store is sealed, see below.
 - Memory: JavaScript strings and buffers cannot be zeroed. Key and plaintext live in process memory.
-- Whole-file rollback (restoring an older database file) is undetectable. Restoring an older *row*
-  (value and its generation together) is undetectable too; restoring only an older value is caught.
+- **Rollback and freshness.** Anyone who can write the database file can restore an older consistent state: one
+  row, several rows, a policy document, or the whole file. lmconn cannot detect that (it would need a counter outside
+  the attacker's reach; out of scope). The policy MAC covers the existence and content of the *current* document, not
+  its freshness: an older, validly MACed document can be put back. Encryption binds a value to its service, field and
+  data key, so a value moved to another row fails; it does not bind it to a point in time.
+- **Environment key.** `LMCONN_KEY` is captured and removed from `process.env` at the very top of the bin entry, so
+  children (mcp, acp servers, anything spawned) do not inherit it. It stays readable in `/proc/PID/environ` of the
+  lmconn process by the same uid (same-principal limit), and in whatever launched lmconn.
 - Old plaintext: `cred encrypt-existing` writes a new file, but earlier backups, copies, journals and SSD
   blocks may still hold the old plaintext. Rotate any credential whose old file was ever copied.
 - Windows file keys: see the Windows section.
@@ -41,7 +47,10 @@ Every key file source gets the same checks as the store path: owned by the effec
 none in the path except root-owned system links), no extra hard links, trusted ancestors, directory 0700.
 A key file wider than 0600 is `STORE_SECURITY` and is **not** repaired (it may already have been read): rotate
 the key. The key directory must differ from the database directory, so one careless copy of the store does not
-take the key along. Keys are exactly 32 bytes of strict base64; anything else is `KEY_INVALID`.
+take the key along: a key directory that is equal to, inside or containing the database directory is refused.
+`LMCONN_KEY_FILE` and `XDG_CONFIG_HOME` must be absolute. A group- or world-writable key directory is `STORE_SECURITY`
+and, like a loose key file, is refused rather than chmod-repaired (the store directory is repaired; the key directory
+is not). Keys are exactly 32 bytes of strict base64; anything else is `KEY_INVALID`.
 
 ### Creation
 
@@ -57,37 +66,48 @@ a canary (one data key is unwrapped before any write).
 
 If no key can be found or created (unwritable directory, read-only filesystem), a write fails with
 `KEY_UNAVAILABLE`. Setting `LMCONN_ALLOW_PLAINTEXT=1` allows plaintext in that case only, and never once the
-store holds ciphertext, is sealed, or runs in broker mode.
+store holds ciphertext, is sealed, or runs in broker mode. Every plaintext write prints a warning on stderr; the next
+write that can use a key encrypts the plaintext rows in place and says so.
 
 ## Format and integrity
 
 Per value: `lmc1:<keyId>:<b64 nonce 12 B>:<b64 ciphertext||tag 16 B>`.
 
 - AES-256-GCM, 12-byte random nonce, 16-byte tag, all enforced (a truncated tag, nonce or key fails).
-- AAD: `u8 version, u32 len||service, u32 len||field, u32 len||keyId, u64 gen`. A value moved to another row
-  fails authentication; names containing NUL are unambiguous.
-- `gen` comes from a store-wide counter incremented on every write (also across delete and re-create), so
-  an older ciphertext pasted over a newer row fails.
+- AAD: `u8 version, u32 len||service, u32 len||field, u32 len||keyId`. A value moved to another row
+  fails authentication; names containing NUL are unambiguous. There is no generation counter: it would not stop
+  an attacker restoring value and counter together (see Rollback above).
 - DEK wrap: AES-256-GCM with the IK, AAD `data_keys` and the DEK id.
 - Errors: `DECRYPT_FAILED`, `KEY_MISSING`, `KEY_MISMATCH`, `KEY_INVALID`, `KEY_UNAVAILABLE`, `STORE_TAMPERED`,
   `STORE_SECURITY`, `STORE_VERSION`. No key, secret or ciphertext appears in any message, stdout or stderr.
 
 ### Sealing: no downgrade
 
-A store is **sealed** (`meta.encrypted_required`, `PRAGMA user_version = 2`, and triggers that make SQLite refuse
-a plaintext insert or update) as soon as an encrypted write finds no plaintext row, or `cred encrypt-existing`
-finishes. Until then a **mixed** store works: legacy plaintext rows are read as before, new writes are encrypted.
-Once sealed (and always in broker mode):
+A store is **required** (every non-`lmc1:` value and every `credential_policy` row without a valid MAC is
+`STORE_TAMPERED`) when ANY of these holds: the `meta.encrypted_required` marker; any `data_keys` row; any `lmc1:` value;
+`PRAGMA user_version >= 2` or the seal triggers; the **sealed record**; or broker mode. The first four need only the
+database, so an attacker has to remove all of them (and every ciphertext) to look like a legacy store; the sealed
+record closes that gap.
 
-- any value not starting with `lmc1:` is `STORE_TAMPERED`;
-- each `credential_policy` row carries an HMAC-SHA256 (key = HKDF(IK, "lmconn policy mac")) and a second MAC
-  covers the set of services and the marker, so edited, planted and **deleted** policy rows (which would
-  unprotect a no-reveal handle) are `STORE_TAMPERED`;
-- an older lmconn cannot write plaintext into the file (SQLite refuses it); a newer format is `STORE_VERSION`.
+The sealed record is a small file `sealed.<sha256 of the database realpath>` (0600) in the **key directory**, holding an
+HMAC (key = HKDF(IK, "lmconn sealed")) over that realpath. It is written when the store is sealed, rewritten after a key
+rotation, and is not written for `LMCONN_KEY` (no key directory) or on Windows. A database writer who cannot touch the
+key directory therefore cannot turn a sealed store back into a legacy one, even by dropping the triggers, deleting
+`meta` and `data_keys`, resetting `user_version` and planting plaintext. A record that does not verify is `KEY_MISMATCH`.
+Whoever can write the key directory is the same principal as the key (out of scope). With `LMCONN_KEY` only, the seal
+rests on the in-database rules above.
 
-Limit: an attacker with write access to the file and no key can still remove the seal markers together
-(marker, user_version, triggers, MACs) in a store that has not been opened by broker mode. Broker mode needs no
-marker: it always requires encryption.
+There is no half-plaintext state: the first encrypted write into a store that still has legacy plaintext rows encrypts
+all of them in place in the same transaction, seals the store and prints a notice (old plaintext may remain in free
+pages, journals and backups; `cred encrypt-existing` rewrites the file). Legacy plaintext is readable only until then.
+
+Policy rows each carry an HMAC-SHA256 (key = HKDF(IK, "lmconn policy mac")) and a second MAC covers the set of services
+and the marker, so edited, planted and **deleted** policy rows (which would unprotect a no-reveal handle) are
+`STORE_TAMPERED`. These MACs prove existence and content of the current document, not freshness.
+
+The seal triggers make SQLite refuse a plaintext insert or update, so an **older lmconn cannot write plaintext into a
+sealed store**. An older lmconn does *not* refuse to open it: it can read `lmc1:` blobs as if they were secrets
+(harmless ciphertext), and it cannot decrypt anything. A newer file format is refused by this version (`STORE_VERSION`).
 
 ## Commands
 
@@ -96,7 +116,7 @@ marker: it always requires encryption.
 | `cred encrypt-existing [--all]` | Encrypt every legacy plaintext value and seal the store. `--all` also re-encrypts rows under older data keys, deletes data keys no row names and removes `instance.key.prev`. Safe to re-run. |
 | `key rotate` | New IK, DEKs rewrapped, rows untouched, old IK kept as `instance.key.prev`. Hygiene only, see below. |
 | `key rotate --data` | New active DEK for new writes. Old DEKs are never deleted while a row names them. |
-| `key backup --to FILE` | Copy the IK to a new 0600 file (`O_EXCL`, fsync). Never prints the key. Refuses a target in the database directory or under Dropbox, iCloud, OneDrive, Google Drive or Syncthing folders (best effort), and existing files. |
+| `key backup --to FILE` | Copy the IK to a new 0600 file (`O_EXCL`, fsync). Never prints the key. Refuses a target in the database directory, under a folder named like a sync client (Dropbox, iCloud, OneDrive, My Drive, Google Drive, Box, pCloud, Nextcloud, MEGA, Syncthing, Sync; best effort) and existing files. |
 
 `cred encrypt-existing` builds a new database file holding only live data (rows encrypted as they are copied, so
 the new file never holds plaintext), fsyncs it and renames it over the old one while holding the write lock.
@@ -117,7 +137,7 @@ of SHA-256 of the IK). Order: new key file written and fsynced, old key saved as
 switched in, DB rewrap committed in one transaction. A reader picks the key matching `ik_id` from the current
 file and `.prev`, so a crash at any step leaves the store readable; writes wait (`KEY_MISMATCH`) until a re-run of
 `key rotate` finishes the rewrap. Delete `.prev` when satisfied (`cred encrypt-existing --all` does it too).
-`key rotate` needs a key file; with `LMCONN_KEY` rotate the secret in your CI system and re-create the store.
+After a rotation every earlier key backup is stale (lmconn says so on stderr): make a new `key backup`. `key rotate` needs a key file; with `LMCONN_KEY` rotate the secret in your CI system and re-create the store.
 
 **After a suspected IK or database-plus-IK leak**: rotating the IK alone is *not* enough (an attacker who copied
 the old IK and a database can unwrap the DEKs, which are unchanged). Do:
@@ -136,7 +156,7 @@ unless removed; lmconn removes it from its own `process.env` right after reading
 
 ## Compatibility
 
-Existing stores open unchanged: columns `creds.gen` and `credential_policy.mac` and the tables `meta` and `data_keys`
+Existing stores open unchanged: the column `credential_policy.mac` and the tables `meta` and `data_keys`
 are added in place. The no-reveal policy, broker mode and handle semantics are unchanged; a no-reveal handle is
 simply also ciphertext on disk. Out of scope: KMS, HSM, OS keychain (a keychain would slot in as key source 0),
 per-credential access control, a secrets server, any new reveal or export path.

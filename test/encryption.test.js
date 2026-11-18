@@ -74,6 +74,13 @@ async function capture(run, args, stdin) {
   assert.equal(out.trim().split('\n').length, 1, 'exactly one envelope');
   return { code, envelope: JSON.parse(out), out, err };
 }
+async function stderrOf(fn) {
+  const write = process.stderr.write;
+  let text = '';
+  process.stderr.write = chunk => { text += chunk; return true; };
+  try { await fn(); } finally { process.stderr.write = write; }
+  return text;
+}
 const codeOf = fn => { try { fn(); } catch (err) { return err.code ?? `uncoded:${err.message}`; } return null; };
 
 // A store as an older lmconn left it: plain table, plaintext values, no gen column.
@@ -92,7 +99,7 @@ function raw(w, fn) {
   const db = new DatabaseSync(w.db);
   try { return fn(db); } finally { db.close(); }
 }
-const rows = w => raw(w, db => db.prepare('SELECT service, field, value, gen FROM creds ORDER BY service, field').all());
+const rows = w => raw(w, db => db.prepare('SELECT service, field, value FROM creds ORDER BY service, field').all());
 const bytes = w => [w.db, `${w.db}-journal`].filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f));
 const holds = (w, text) => bytes(w).some(b => b.includes(Buffer.from(text)));
 const keyText = w => fs.readFileSync(w.key, 'utf8').trim();
@@ -100,7 +107,7 @@ const flip = text => text.slice(0, -3) + (text.slice(-3, -2) === 'A' ? 'B' : 'A'
 
 // ---- 1, 5: round trip, legacy, mixed, read never creates a key ----------------------------------
 
-test('round trip for every field kind; legacy plaintext readable; mixed table; a read never creates a key', async () => {
+test('round trip for every field kind; legacy plaintext is readable until the first write, which encrypts it in place and seals; a read never creates a key', async () => {
   const w = use(world());
   legacyDb(w, [['legacy', 'api_key', 'synthetic-legacy-api'], ['legacy', 'oauth_access_token', 'synthetic-legacy-access']]);
   assert.equal(getCred('legacy', 'api_key'), 'synthetic-legacy-api');
@@ -108,16 +115,16 @@ test('round trip for every field kind; legacy plaintext readable; mixed table; a
   const read = await capture(runCred, ['get', 'legacy', 'api_key', '--reveal']);
   assert.equal(read.envelope.result.value, 'synthetic-legacy-api');
   assert.equal(fs.existsSync(w.key), false, 'reading legacy rows must not create a key');
-  const kinds = { api_key: 'synthetic-api', oauth_access_token: 'synthetic-access', oauth_refresh_token: 'synthetic-refresh', oauth_client_secret: 'synthetic-client', oauth_expires_at: '2030-01-01T00:00:00.000Z', empty: '', unicode: 'synthetic-\u{1F511}-é\n tail ' };
-  for (const [field, value] of Object.entries(kinds)) setCred('mixed', field, value);
+  const kinds = { api_key: 'synthetic-api', oauth_access_token: 'synthetic-access', oauth_refresh_token: 'synthetic-refresh', oauth_client_secret: 'synthetic-client', oauth_expires_at: '2030-01-01T00:00:00.000Z', empty: '', unicode: 'synthetic-\u{1F511}-\u00e9\n tail ' };
+  const notice = await stderrOf(() => { for (const [field, value] of Object.entries(kinds)) setCred('mixed', field, value); });
+  assert.match(notice, /2 plaintext credential\(s\) were encrypted in place/);
   for (const [field, value] of Object.entries(kinds)) assert.equal(getCred('mixed', field), value, field);
-  assert.equal(getCred('legacy', 'api_key'), 'synthetic-legacy-api', 'legacy row still readable next to ciphertext');
-  const stored = rows(w);
-  assert.ok(stored.filter(r => r.service === 'mixed').every(r => r.value.startsWith('lmc1:')));
-  assert.ok(stored.filter(r => r.service === 'legacy').every(r => !r.value.startsWith('lmc1:')));
-  assert.ok(!holds(w, 'synthetic-api') && !holds(w, 'synthetic-refresh'));
-  assert.equal(raw(w, db => db.prepare("SELECT v FROM meta WHERE k = 'encrypted_required'").get()), undefined, 'a mixed store is not sealed yet');
+  assert.equal(getCred('legacy', 'api_key'), 'synthetic-legacy-api', 'legacy row survives the in-place upgrade');
+  assert.ok(rows(w).every(r => r.value.startsWith('lmc1:')), 'a store is never half plaintext');
+  assert.ok(!holds(w, 'synthetic-api') && !holds(w, 'synthetic-refresh') && !holds(w, 'synthetic-legacy-api'));
+  assert.equal(raw(w, db => db.prepare("SELECT v FROM meta WHERE k = 'encrypted_required'").get().v), '1', 'sealed by the first write');
   assert.equal(fs.existsSync(w.key), true);
+  assert.equal(fs.readdirSync(dirname(w.key)).filter(f => f.startsWith('sealed.')).length, 1, 'external sealed record');
   closeDb(w.db);
   const imported = lmconn(w, ['cred', 'oauth-store', 'oauthsvc', '--stdin'], { kind: 'oauth2', accessToken: 'synthetic-os-access', refreshToken: 'synthetic-os-refresh', scopes: ['read'], owner: 'tester', source: 'lmauth' });
   assert.equal(imported.code, 0, imported.out + imported.err);
@@ -320,23 +327,19 @@ test('broker mode requires encryption: no plaintext fallback, a fresh broker sto
 
 // ---- 6 (hardening): rollback ----------------------------------------------------------------------
 
-test('a restored older value fails authentication (generation in the AAD); a whole older row is the documented limit', () => {
+test('rollback is NOT detected: an older row or policy document restores cleanly (documented limit)', () => {
   const w = use(world());
   setCred('svc', 'api_key', 'synthetic-first');
   const first = rows(w)[0];
   setCred('svc', 'api_key', 'synthetic-second');
-  assert.ok(rows(w)[0].gen > first.gen);
   raw(w, db => db.prepare('UPDATE creds SET value = ?').run(first.value));
-  assert.equal(codeOf(() => getCred('svc', 'api_key')), 'DECRYPT_FAILED');
-  raw(w, db => db.prepare('UPDATE creds SET value = ?, gen = ?').run(first.value, first.gen));
-  assert.equal(getCred('svc', 'api_key'), 'synthetic-first', 'restoring value and gen together is undetectable, like whole-file rollback (docs)');
-  setCred('svc', 'api_key', 'synthetic-third');
-  setCred('gone', 'f', 'x');
-  const old = rows(w).find(r => r.service === 'gone');
-  raw(w, db => db.prepare("DELETE FROM creds WHERE service = 'gone'").run());
-  setCred('gone', 'f', 'y');
-  raw(w, db => db.prepare("UPDATE creds SET value = ? WHERE service = 'gone'").run(old.value));
-  assert.equal(codeOf(() => getCred('gone', 'f')), 'DECRYPT_FAILED', 'delete and re-create does not reset the generation');
+  assert.equal(getCred('svc', 'api_key'), 'synthetic-first', 'a database writer can restore an older consistent row');
+  const docA = { noReveal: true, kind: 'bearer', issuer: null, owner: 'o', origins: ['https://a.invalid'], refresh: null };
+  putPolicy('h', docA);
+  const old = raw(w, db => db.prepare('SELECT * FROM credential_policy').get());
+  putPolicy('h', { ...docA, origins: ['https://b.invalid'] });
+  raw(w, db => db.prepare('UPDATE credential_policy SET document = ?, mac = ?').run(old.document, old.mac));
+  assert.deepEqual(policy('h').origins, ['https://a.invalid'], 'the policy MAC proves existence and content, not freshness');
 });
 
 // ---- 7: rotation -------------------------------------------------------------------------------------
@@ -414,7 +417,9 @@ test('eight processes writing first at once create exactly one key and one activ
   }));
   const results = await Promise.all(children);
   for (const r of results) assert.equal(r.code, 0, r.out + r.err);
-  assert.deepEqual(fs.readdirSync(dirname(w.key)), ['instance.key'], 'no stray temp files');
+  const names = fs.readdirSync(dirname(w.key));
+  assert.equal(names.length, 2, 'no stray temp files');
+  assert.ok(names.includes('instance.key') && names.some(n => n.startsWith('sealed.')));
   assert.equal(results.filter(r => /created a new encryption key/.test(r.err)).length, 1, 'exactly one process created the key');
   assert.equal(raw(w, db => db.prepare('SELECT count(*) AS n FROM data_keys WHERE active = 1').get().n), 1);
   assert.equal(raw(w, db => db.prepare('SELECT count(*) AS n FROM data_keys').get().n), 1);
@@ -611,4 +616,110 @@ test('the new operations are published in the cli.schema.v1 document with write 
   assert.equal(call.code, 1);
   assert.equal(call.envelope.error.code, 'KEY_MISSING', 'rotating a store with no key is refused, not auto-created');
   assert.equal(fs.existsSync(w.key), false);
+});
+
+// ---- review round 2 -----------------------------------------------------------------------------------------------------
+
+const POLICY = { noReveal: true, kind: 'bearer', issuer: null, owner: 'o', origins: ['https://api.invalid'], refresh: null };
+const stripMarkers = db => {
+  db.exec('DROP TRIGGER IF EXISTS lmconn_sealed_insert; DROP TRIGGER IF EXISTS lmconn_sealed_update; DELETE FROM meta; PRAGMA user_version = 0;');
+};
+
+for (const mode of ['legacy', 'broker']) {
+  test(`downgrade by a database writer without the key fails with STORE_TAMPERED (${mode} mode)`, () => {
+    const extra = mode === 'broker' ? { LMCONN_STORE_MODE: 'broker' } : {};
+    // Attack 1: strip every marker inside the file and plant plaintext. data_keys and lmc1 values still prove the seal.
+    const a = use(world(), extra);
+    setCred('svc', 'api_key', 'synthetic-secret-a');
+    putPolicy('h', POLICY);
+    raw(a, db => { stripMarkers(db); db.prepare("UPDATE creds SET value = 'synthetic-planted'").run(); });
+    assert.equal(codeOf(() => getCred('svc', 'api_key')), 'STORE_TAMPERED');
+    // Attack 2: also delete the data keys and every ciphertext; only the sealed record in the key directory remains.
+    const b = use(world(), extra);
+    setCred('svc', 'api_key', 'synthetic-secret-b');
+    putPolicy('h', POLICY);
+    raw(b, db => { stripMarkers(db); db.exec('DELETE FROM data_keys'); db.prepare("UPDATE creds SET value = 'synthetic-planted'").run(); });
+    assert.equal(codeOf(() => getCred('svc', 'api_key')), 'STORE_TAMPERED');
+    assert.equal(codeOf(() => policy('h')), 'STORE_TAMPERED', 'policy row whose MAC the set record no longer vouches for');
+    // Attack 3: widen a noReveal policy's origins, remove the MAC, strip markers.
+    const c = use(world(), extra);
+    setCred('svc', 'api_key', 'synthetic-secret-c');
+    putPolicy('h', POLICY);
+    raw(c, db => { stripMarkers(db); db.prepare('UPDATE credential_policy SET document = ?, mac = NULL').run(JSON.stringify({ ...POLICY, origins: ['https://evil.invalid'] })); });
+    assert.equal(codeOf(() => policy('h')), 'STORE_TAMPERED');
+    assert.equal(codeOf(() => getCred('svc', 'api_key')), 'STORE_TAMPERED');
+    // Same, with every ciphertext and data key gone too.
+    const d = use(world(), extra);
+    putPolicy('h', POLICY);
+    raw(d, db => { stripMarkers(db); db.prepare('UPDATE credential_policy SET document = ?, mac = NULL').run(JSON.stringify({ ...POLICY, origins: ['https://evil.invalid'] })); });
+    assert.equal(codeOf(() => policy('h')), 'STORE_TAMPERED');
+    // The key directory is the trust anchor: without the sealed record the plaintext rows would be accepted (documented).
+    const e = use(world(), extra);
+    setCred('svc', 'api_key', 'synthetic-secret-e');
+    raw(e, db => { stripMarkers(db); db.exec('DELETE FROM data_keys'); db.prepare("UPDATE creds SET value = 'synthetic-planted'").run(); });
+    for (const f of fs.readdirSync(dirname(e.key))) if (f.startsWith('sealed.')) fs.unlinkSync(join(dirname(e.key), f));
+    if (mode === 'legacy') assert.equal(getCred('svc', 'api_key'), 'synthetic-planted');
+  });
+}
+
+test('a tampered sealed record is rejected', () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-record');
+  const record = fs.readdirSync(dirname(w.key)).find(f => f.startsWith('sealed.'));
+  fs.writeFileSync(join(dirname(w.key), record), `${randomBytes(32).toString('base64')}\n`, { mode: 0o600 });
+  assert.equal(codeOf(() => getCred('svc', 'api_key')), 'KEY_MISMATCH');
+});
+
+test('LMCONN_KEY is captured at the top of the bin entry: mcp and acp children never see it', () => {
+  const w = world();
+  const key = randomBytes(32).toString('base64');
+  const probe = join(w.dir, 'probe');
+  fs.mkdirSync(w.dir, { recursive: true });
+  const code = `require('fs').appendFileSync(${JSON.stringify(probe)}, String(process.env.LMCONN_KEY) + '\\n')`;
+  lmconn(w, ['mcp', 'tools', '--command', process.execPath, '--arg', '-e', '--arg', code, '--timeout-ms', '3000'], undefined, { LMCONN_KEY: key });
+  lmconn(w, ['acp', 'chat', '--command', process.execPath, '--arg', '-e', '--arg', code, '--prompt', 'hi', '--timeout-ms', '3000'], undefined, { LMCONN_KEY: key });
+  const seen = fs.readFileSync(probe, 'utf8').trim().split('\n');
+  assert.deepEqual(seen, ['undefined', 'undefined'], 'both children ran and saw no key');
+});
+
+test('key location: relative paths, an overlapping directory or a writable directory are STORE_SECURITY and never repaired', { skip: !posix && 'POSIX modes' }, () => {
+  const w = world();
+  for (const extra of [{ LMCONN_KEY_FILE: 'relative/instance.key' }, { XDG_CONFIG_HOME: 'relative-config' },
+    { LMCONN_KEY_FILE: join(dirname(w.db), 'nested', 'instance.key') }, { LMCONN_KEY_FILE: join(w.dir, 'instance.key') }]) {
+    use(w, extra);
+    process.env.XDG_CONFIG_HOME = extra.XDG_CONFIG_HOME ?? w.cfg;
+    assert.equal(codeOf(() => setCred('svc', 'api_key', 'x')), 'STORE_SECURITY', JSON.stringify(extra));
+    assert.equal(rows(w).length, 0);
+  }
+  const loose = world(); use(loose);
+  fs.mkdirSync(dirname(loose.key), { recursive: true, mode: 0o700 });
+  fs.chmodSync(dirname(loose.key), 0o770);
+  assert.equal(codeOf(() => setCred('svc', 'api_key', 'x')), 'STORE_SECURITY');
+  assert.equal(fs.statSync(dirname(loose.key)).mode & 0o777, 0o770, 'a writable key directory is refused, not chmod-repaired');
+  assert.equal(fs.existsSync(loose.key), false);
+});
+
+test('key backup refuses the broader set of sync folders; key rotate warns that older backups are stale', { skip: !posix && 'POSIX modes' }, async () => {
+  const w = use(world());
+  setCred('svc', 'api_key', 'synthetic-sync');
+  for (const name of ['Box', 'Sync', 'My Drive', 'Google Drive', 'OneDrive - Corp', 'pCloud Drive', 'Nextcloud', 'MEGA', 'iCloud Drive', 'Syncthing']) {
+    const folder = join(w.dir, name, 'inner');
+    fs.mkdirSync(folder, { recursive: true });
+    assert.equal((await capture(runKey, ['backup', '--to', join(folder, 'k.bak')])).envelope.error.code, 'STORE_SECURITY', name);
+  }
+  const rotated = await capture(runKey, ['rotate']);
+  assert.match(rotated.err, /older key backups are now STALE/i);
+});
+
+test('LMCONN_ALLOW_PLAINTEXT=1 warns on every plaintext write; the next encrypted write encrypts the rest and says so', { skip: (!posix || isRoot) && 'needs an unprivileged POSIX user' }, async () => {
+  const w = use(world(), { LMCONN_ALLOW_PLAINTEXT: '1' });
+  fs.mkdirSync(w.cfg, { mode: 0o500 });
+  for (const field of ['a', 'b']) assert.match(await stderrOf(() => setCred('svc', field, `synthetic-plain-${field}`)), /stored as PLAINTEXT/);
+  assert.deepEqual(rows(w).map(r => r.value), ['synthetic-plain-a', 'synthetic-plain-b']);
+  fs.chmodSync(w.cfg, 0o700);
+  use(w, { LMCONN_ALLOW_PLAINTEXT: '1' });
+  const notice = await stderrOf(() => setCred('svc', 'c', 'synthetic-encrypted'));
+  assert.match(notice, /2 plaintext credential\(s\) were encrypted in place/);
+  assert.ok(rows(w).every(r => r.value.startsWith('lmc1:')));
+  assert.equal(getCred('svc', 'a'), 'synthetic-plain-a');
 });
