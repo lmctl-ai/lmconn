@@ -60,6 +60,13 @@ lmconn --cli-schema --json                                # cli.schema.v1 docume
 | `cred list` | services, fields and timestamps, never values |
 | `cred delete <service> <field>` | remove one credential |
 | `cred path` | the database path (`LMCONN_DB` overrides `~/.lmconn/creds.db`) |
+| `cred encrypt-existing [--all]` | encrypt legacy plaintext values and seal the store; `--all` re-encrypts under the active data key |
+| `key rotate [--data]` | rotate the instance key (rewrap data keys) or start a new data key |
+| `key backup --to FILE` | copy the instance key to a new 0600 file; never printed |
+
+Stored values are encrypted at rest with a key kept outside the database directory (`~/.config/lmconn/instance.key`,
+`LMCONN_KEY_FILE` or `LMCONN_KEY`). Back the key up separately; the threat model, rotation and the Windows stance are in
+[docs/encryption-at-rest.md](docs/encryption-at-rest.md).
 
 LLM providers read `<provider> api_key`; `http --auth SERVICE` reads
 `<SERVICE> api_key`; `github` reads `github api_key`.
@@ -241,7 +248,7 @@ is an end-to-end demo that needs no credentials. Details in
 
 - `src/main.js` — argument router, `--cli-schema`, schema-call bridge
 - `src/result.js` — envelope helpers (`emit`, `ok`, `fail`, `emitFail`)
-- `src/creds.js` — SQLite credential store
+- `src/creds.js` — SQLite credential store; `src/crypto-store.js` and `src/keystore.js` — encryption at rest
 - `src/providers/` — LLM provider registry and adapters (API + agent CLI)
 - `src/cmd-*.js` — command areas (`cred`, `llm`, `http`, `github`), each exporting `run(args)` and `ops`
 - `src/schema.js` — cli.schema.v1 generator and `--input-json` bridge

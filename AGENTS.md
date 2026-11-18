@@ -28,6 +28,7 @@ store uses `node:sqlite`. Tests use `node --test`.
   lmscript's `--input-json` bridge cannot reach them.
 
 - `src/cmd-acp.js` / `src/acp.js`: ACP (Agent Client Protocol) stdio client; see `docs/acp.md`.
+- `src/crypto-store.js` / `src/keystore.js` / `src/cmd-key.js`: encryption at rest; see `docs/encryption-at-rest.md`. A write creates the key file on first use, so tests run with `--import ./test/setup-env.mjs` (temp `XDG_CONFIG_HOME`); never let a test touch `~/.config/lmconn`.
 - `src/cmd-mcp.js` / `src/mcp.js`: MCP stdio client; both share `src/rpc-stdio.js`. See `docs/mcp.md`.
 
 ## Ownership (initial wave)
