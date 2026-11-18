@@ -631,6 +631,8 @@ test('the new operations are published in the cli.schema.v1 document with write 
 // ---- review round 2 -----------------------------------------------------------------------------------------------------
 
 const POLICY = { noReveal: true, kind: 'bearer', issuer: null, owner: 'o', origins: ['https://api.invalid'], refresh: null };
+// Windows refuses no-reveal (protected) stores, so the tests that run there use an ordinary legacy binding.
+const PLAIN_POLICY = { ...POLICY, noReveal: false };
 const stripMarkers = db => {
   db.exec('DROP TRIGGER IF EXISTS lmconn_sealed_insert; DROP TRIGGER IF EXISTS lmconn_sealed_update; DELETE FROM meta; PRAGMA user_version = 0;');
 };
@@ -799,12 +801,12 @@ test('a missing record warns on read, is regenerated on the next write, and a mo
 
 test('LMCONN_KEY mode: first sealing names the unauthenticated policy documents it adopts', async () => {
   const w = use(world(), { LMCONN_KEY: randomBytes(32).toString('base64') });
-  legacyDb(w, [['old', 'api_key', 'synthetic-old']], [['handle-one', JSON.stringify(POLICY)], ['handle-two', JSON.stringify(POLICY)]]);
+  legacyDb(w, [['old', 'api_key', 'synthetic-old']], [['handle-one', JSON.stringify(PLAIN_POLICY)], ['handle-two', JSON.stringify(PLAIN_POLICY)]]);
   const notice = await stderrOf(() => setCred('svc', 'f', 'synthetic-env'));
   assert.match(notice, /adopted 2 unauthenticated policy document\(s\) \(handle-one, handle-two\)/);
   assert.match(notice, /LMCONN_KEY_FILE/);
   assert.equal(fs.existsSync(dirname(w.key)), false, 'no key directory, hence no record');
-  assert.deepEqual(policy('handle-one'), POLICY);
+  assert.deepEqual(policy('handle-one'), PLAIN_POLICY);
 });
 
 test('a plaintext row in an encrypted store names its service and field and the repair', () => {
@@ -857,14 +859,14 @@ test('an unreadable key directory is reported as a key directory permission prob
 test('env-key variant: legacy upgrade, round trip, tamper, wrong key, downgrade and migration with LMCONN_KEY only', async () => {
   const key = randomBytes(32).toString('base64');
   const w = use(world(), { LMCONN_KEY: key });
-  legacyDb(w, [['old', 'api_key', 'synthetic-env-old']], [['h', JSON.stringify(POLICY)]]);
+  legacyDb(w, [['old', 'api_key', 'synthetic-env-old']], [['h', JSON.stringify(PLAIN_POLICY)]]);
   assert.equal(getCred('old', 'api_key'), 'synthetic-env-old', 'legacy plaintext is readable before the first write');
   setCred('svc', 'api_key', 'synthetic-env-new');
   assert.ok(rows(w).every(r => r.value.startsWith('lmc1:')));
   assert.ok(!holds(w, 'synthetic-env-new'));
   assert.equal(getCred('old', 'api_key'), 'synthetic-env-old');
   assert.equal(getCred('svc', 'api_key'), 'synthetic-env-new');
-  assert.deepEqual(policy('h'), POLICY);
+  assert.deepEqual(policy('h'), PLAIN_POLICY);
   const good = rows(w).find(r => r.service === 'svc').value;
   raw(w, db => db.prepare("UPDATE creds SET value = ? WHERE service = 'svc'").run(flip(good)));
   assert.equal(codeOf(() => getCred('svc', 'api_key')), 'DECRYPT_FAILED');
