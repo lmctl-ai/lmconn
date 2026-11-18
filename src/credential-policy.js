@@ -1,11 +1,13 @@
 import { openDb, getCred } from './creds.js';
 import { endpoint, origins, securityError } from './oauth-security.js';
+import { verifyPolicies, writePolicy } from './crypto-store.js';
 export function brokerMode() {
   const mode = process.env.LMCONN_STORE_MODE;
   if (mode && !['legacy', 'broker'].includes(mode)) throw securityError('Unknown credential store mode');
   return mode === 'broker';
 }
 export function policy(service, db = openDb()) {
+  verifyPolicies(db); // sealed or broker store: every policy row and the service set must carry a valid MAC
   const row = db.prepare('SELECT document FROM credential_policy WHERE service=?').get(service);
   if (!row) return null;
   try {
@@ -16,7 +18,7 @@ export function policy(service, db = openDb()) {
   } catch { throw securityError('Credential binding is invalid'); }
 }
 export function putPolicy(service, document, db = openDb()) {
-  db.prepare('INSERT INTO credential_policy(service,document) VALUES (?,?) ON CONFLICT(service) DO UPDATE SET document=excluded.document').run(service, JSON.stringify(document));
+  writePolicy(db, service, JSON.stringify(document));
 }
 export function refuseLegacyWrite(service, db = openDb()) {
   if (brokerMode() || policy(service, db)?.noReveal) throw securityError('Protected credentials require cred store; legacy writes cannot change them');

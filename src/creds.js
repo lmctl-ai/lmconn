@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, lstatSync } from 'node:fs';
 import { secureStorePath } from './store-path.js';
 import { securityError } from './oauth-security.js';
+import { SCHEMA, registerDb, migrateSchema, writeValue, readValue } from './crypto-store.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -45,13 +46,10 @@ export function openDb(path = dbPath()) {
     refuseWindowsProtected(db);
     const st = lstatSync(secured.file);
     if (st.dev !== secured.identity.dev || st.ino !== secured.identity.ino) throw new Error('Credential store identity changed');
-    db.exec(`PRAGMA secure_delete=ON;
-      PRAGMA journal_mode=DELETE;
-      CREATE TABLE IF NOT EXISTS creds (
-        service TEXT NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL,
-        PRIMARY KEY (service, field)
-      );
-      CREATE TABLE IF NOT EXISTS credential_policy (service TEXT PRIMARY KEY, document TEXT NOT NULL);`);
+    db.exec('PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON; PRAGMA journal_mode=DELETE;');
+    db.exec(SCHEMA);
+    migrateSchema(db);
+    registerDb(db, secured.file);
     cache.set(path, { db, identity: secured.identity });
     return db;
   } catch (err) { db.close(); throw err; }
@@ -62,16 +60,17 @@ export function closeDb(path = dbPath()) {
   if (db) { db.db.close(); cache.delete(path); }
 }
 
+// Values are encrypted when a key exists or can be created (crypto-store.js); a write may create the key.
 export function setCred(service, field, value, db = openDb()) {
+  const stored = writeValue(db, service, field, value);
   db.prepare(
-    'INSERT INTO creds (service, field, value, updated_at) VALUES (?, ?, ?, ?) ' +
-    'ON CONFLICT (service, field) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
-  ).run(service, field, value, new Date().toISOString());
+    'INSERT INTO creds (service, field, value, updated_at, gen) VALUES (?, ?, ?, ?, ?) ' +
+    'ON CONFLICT (service, field) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, gen = excluded.gen',
+  ).run(service, field, stored.value, new Date().toISOString(), stored.gen);
 }
 
 export function getCred(service, field, db = openDb()) {
-  const row = db.prepare('SELECT value FROM creds WHERE service = ? AND field = ?').get(service, field);
-  return row ? row.value : null;
+  return readValue(db, service, field);
 }
 
 // Names and timestamps only, never values.

@@ -33,12 +33,16 @@ function ancestors(directory) {
     if (process.platform !== 'win32' && (st.mode & 0o022) && !(st.mode & 0o1000) && current !== directory) fail();
   }
 }
-export function secureStorePath(filename, protectedStore = false) {
-  if (process.platform === 'win32' && protectedStore) throw securityError('Protected credential stores require native Windows ACL support', 'STORE_SECURITY');
-  const file = path.resolve(filename), directory = path.dirname(file);
+// Directory rules shared by the store and the key file: trusted ancestors, owned, private (repaired to 0700).
+export function secureDirectory(directory) {
   ancestors(directory);
   const st = fs.lstatSync(directory); owner(st); if (st.isSymbolicLink() || !st.isDirectory() || (st.mode & 0o1000)) fail();
   if (process.platform !== 'win32') { fs.chmodSync(directory, 0o700); if ((fs.statSync(directory).mode & 0o777) !== 0o700) fail(); }
+}
+export function secureStorePath(filename, protectedStore = false) {
+  if (process.platform === 'win32' && protectedStore) throw securityError('Protected credential stores require native Windows ACL support', 'STORE_SECURITY');
+  const file = path.resolve(filename), directory = path.dirname(file);
+  secureDirectory(directory);
   // The owner-only directory seals the check/open interval against other principals.
   for (const suffix of ['-journal', '-wal', '-shm']) regular(file + suffix);
   return { file, identity: regular(file, true) };
