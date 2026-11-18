@@ -1,5 +1,9 @@
 #!/usr/bin/env node
+import { consumeEnvKey } from '../src/keystore.js';
 import { main } from '../src/main.js';
+
+// Capture LMCONN_KEY before any command (mcp, acp, ...) can spawn a child with the full environment.
+consumeEnvKey();
 
 // A consumer that closes the pipe early (head, jq -e) must not crash the CLI.
 process.stdout.on('error', (err) => {

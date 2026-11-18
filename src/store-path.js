@@ -17,11 +17,22 @@ function regular(file, create = false) {
   } catch (err) { if (!create && err.code === 'ENOENT') return null; fail(); }
   finally { if (fd !== undefined) fs.closeSync(fd); }
 }
+// A journal that another process creates or deletes while we look is not an attack: retry briefly. A symlink is.
+function sidecar(file) {
+  for (let attempt = 0; ; attempt++) {
+    try { return regular(file); } catch (err) {
+      let link = false;
+      try { link = fs.lstatSync(file).isSymbolicLink(); } catch { /* gone */ }
+      if (link || attempt >= 20) throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
+  }
+}
 function ancestors(directory) {
   const parsed = path.parse(directory); let current = parsed.root;
   for (const part of directory.slice(parsed.root.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
-    let st; try { st = fs.lstatSync(current); } catch (err) { if (err.code === 'ENOENT') { fs.mkdirSync(current, { mode: 0o700 }); st = fs.lstatSync(current); } else fail(); }
+    let st; try { st = fs.lstatSync(current); } catch (err) { if (err.code === 'ENOENT') { try { fs.mkdirSync(current, { mode: 0o700 }); } catch (e) { if (e.code !== 'EEXIST') throw e; } st = fs.lstatSync(current); } else fail(); }
     if (st.isSymbolicLink()) {
       // macOS /var and /tmp are root-owned system links; user-controlled links are never accepted.
       const parent = fs.statSync(path.dirname(current));
@@ -39,11 +50,17 @@ export function secureDirectory(directory) {
   const st = fs.lstatSync(directory); owner(st); if (st.isSymbolicLink() || !st.isDirectory() || (st.mode & 0o1000)) fail();
   if (process.platform !== 'win32') { fs.chmodSync(directory, 0o700); if ((fs.statSync(directory).mode & 0o777) !== 0o700) fail(); }
 }
+// Key directories are checked, never repaired: a group- or world-writable directory is refused (the key may be swapped or read).
+export function secureKeyDirectory(directory) {
+  ancestors(directory);
+  const st = fs.lstatSync(directory); owner(st);
+  if (st.isSymbolicLink() || !st.isDirectory() || (process.platform !== 'win32' && (st.mode & 0o022))) fail();
+}
 export function secureStorePath(filename, protectedStore = false) {
   if (process.platform === 'win32' && protectedStore) throw securityError('Protected credential stores require native Windows ACL support', 'STORE_SECURITY');
   const file = path.resolve(filename), directory = path.dirname(file);
   secureDirectory(directory);
   // The owner-only directory seals the check/open interval against other principals.
-  for (const suffix of ['-journal', '-wal', '-shm']) regular(file + suffix);
+  for (const suffix of ['-journal', '-wal', '-shm']) sidecar(file + suffix);
   return { file, identity: regular(file, true) };
 }

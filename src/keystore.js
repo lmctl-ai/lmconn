@@ -8,7 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { homedir } from 'node:os';
 import { securityError } from './oauth-security.js';
-import { secureDirectory } from './store-path.js';
+import { secureKeyDirectory } from './store-path.js';
 
 const keyError = (code, message) => securityError(message, code);
 const insecure = (message = 'Key file is not private or safe') => securityError(message, 'STORE_SECURITY');
@@ -33,17 +33,23 @@ const parseKey = text => {
   return key;
 };
 
+const refuseRelative = name => { throw insecure(`${name} must be an absolute path`); };
 export function keyFilePath() {
-  if (process.env.LMCONN_KEY_FILE) return path.resolve(process.env.LMCONN_KEY_FILE);
+  const file = process.env.LMCONN_KEY_FILE;
+  if (file) return path.isAbsolute(file) ? path.resolve(file) : refuseRelative('LMCONN_KEY_FILE');
   const xdg = process.env.XDG_CONFIG_HOME;
-  return path.join(xdg && path.isAbsolute(xdg) ? xdg : path.join(homedir(), '.config'), 'lmconn', 'instance.key');
+  if (xdg && !path.isAbsolute(xdg)) refuseRelative('XDG_CONFIG_HOME');
+  return path.join(xdg || path.join(homedir(), '.config'), 'lmconn', 'instance.key');
 }
 
 function realDirectory(file) {
   const directory = path.dirname(path.resolve(file));
   try { return fs.realpathSync(directory); } catch { return directory; }
 }
-export const sameDirectory = (a, b) => realDirectory(a) === realDirectory(b);
+const within = (inner, outer) => inner === outer || inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
+// Equal, inside, or containing: any of these puts the key next to (or into) the data it protects.
+export const overlapping = (a, b) => { const x = realDirectory(a), y = realDirectory(b); return within(x, y) || within(y, x); };
+export const insideDirectory = (file, other) => within(realDirectory(file), realDirectory(other));
 
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
@@ -51,7 +57,7 @@ const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0,
 // a key readable by others may already have been read.
 function readKeyFile(file) {
   if (!fs.existsSync(path.dirname(file))) return null;
-  secureDirectory(path.dirname(file));
+  secureKeyDirectory(path.dirname(file));
   for (let attempt = 0; ; attempt++) {
     let fd;
     try {
@@ -70,17 +76,22 @@ function readKeyFile(file) {
 }
 
 // -> {current: {key, id}, prev: {key, id}|null, source, file} or null when no key exists anywhere.
+// Called at the top of the bin entry (before any command can spawn a child) and again by loadKeys.
+// The key stays readable in /proc/PID/environ by the same uid; deleting only protects children.
+export function consumeEnvKey() {
+  if (process.env.LMCONN_KEY === undefined) return;
+  const text = process.env.LMCONN_KEY;
+  delete process.env.LMCONN_KEY;
+  try { envKey = { key: parseKey(text) }; } catch { envKey = { error: true }; }
+}
+
 export function loadKeys(dbFile) {
-  if (process.env.LMCONN_KEY !== undefined) {
-    const text = process.env.LMCONN_KEY;
-    delete process.env.LMCONN_KEY;
-    try { envKey = { key: parseKey(text) }; } catch { envKey = { error: true }; }
-  }
+  consumeEnvKey();
   if (envKey?.error) throw keyError('KEY_INVALID', 'LMCONN_KEY must be 32 bytes of strict base64');
   if (envKey) return { current: entry(envKey.key), prev: null, source: 'env', file: null };
   const file = keyFilePath();
   if (process.platform === 'win32') throw Object.assign(insecure('File-based keys need native Windows ACL support; use LMCONN_KEY'), { windowsFile: true });
-  if (dbFile && sameDirectory(file, dbFile)) throw insecure('The key file must not live in the database directory');
+  if (dbFile && overlapping(file, dbFile)) throw insecure('The key directory must not be inside, equal to or contain the database directory');
   const key = readKeyFile(file);
   if (!key) return null;
   const prev = readKeyFile(file + '.prev');
@@ -111,9 +122,9 @@ function linkSecret(file, bytes) {
 export function createKeys(dbFile) {
   if (process.platform === 'win32') throw Object.assign(insecure('File-based keys need native Windows ACL support; use LMCONN_KEY'), { windowsFile: true });
   const file = keyFilePath();
-  if (dbFile && sameDirectory(file, dbFile)) throw insecure('The key file must not live in the database directory');
+  if (dbFile && overlapping(file, dbFile)) throw insecure('The key directory must not be inside, equal to or contain the database directory');
   let created = false;
-  try { secureDirectory(path.dirname(file)); created = linkSecret(file, crypto.randomBytes(32)); }
+  try { secureKeyDirectory(path.dirname(file)); created = linkSecret(file, crypto.randomBytes(32)); }
   catch (err) { throw unavailable(err); }
   const keys = loadKeys(dbFile);
   if (!keys) throw keyError('KEY_UNAVAILABLE', 'Encryption key could not be created');
@@ -151,15 +162,54 @@ export function removePrevKey(keys) {
 }
 
 // Sync folders are best effort: a key copied there next to the database defeats the point.
-const SYNC_FOLDERS = ['dropbox', 'icloud', 'mobile documents', 'onedrive', 'google drive', 'googledrive', 'syncthing'];
+const SYNC_FRAGMENTS = ['dropbox', 'icloud', 'mobile documents', 'onedrive', 'my drive', 'google drive', 'googledrive', 'pcloud', 'nextcloud', 'syncthing'];
+const SYNC_NAMES = ['box', 'mega', 'sync'];
+const inSyncFolder = file => realDirectory(file).toLowerCase().split(path.sep).some(part => SYNC_NAMES.includes(part) || SYNC_FRAGMENTS.some(name => part.includes(name)));
 export function backupKey(keys, target, dbFile) {
   if (process.platform === 'win32') throw Object.assign(insecure('Key backup needs native Windows ACL support'), { windowsFile: true });
   const file = path.resolve(target);
   if (!fs.existsSync(path.dirname(file))) throw keyError('USAGE', 'Backup target directory does not exist');
-  if (sameDirectory(file, dbFile)) throw insecure('Refusing to back up the key into the database directory');
-  const where = realDirectory(file).toLowerCase().split(path.sep);
-  if (where.some(part => SYNC_FOLDERS.some(name => part.includes(name)))) throw insecure('Refusing to back up the key into a sync folder');
+  if (insideDirectory(file, dbFile)) throw insecure('Refusing to back up the key into the database directory');
+  if (inSyncFolder(file)) throw insecure('Refusing to back up the key into a sync folder');
   try { writeSecret(file, keys.current.key); }
   catch (err) { throw keyError(err.code === 'EEXIST' ? 'USAGE' : 'KEY_UNAVAILABLE', err.code === 'EEXIST' ? 'Backup target already exists' : 'Key backup could not be written'); }
   syncDirectory(path.dirname(file));
+}
+
+// External sealed record: sealed.<sha256 of the database realpath> in the key directory, content = HMAC over that
+// path under HKDF(IK, "lmconn sealed"). It outlives any edit of the database, so stripping every marker inside the
+// file cannot turn a sealed store back into a legacy one. Not written for LMCONN_KEY (no key directory) or Windows.
+function sealedMac(ik, real) {
+  const key = Buffer.from(crypto.hkdfSync('sha256', ik, Buffer.alloc(0), 'lmconn sealed', 32));
+  return crypto.createHmac('sha256', key).update(real).digest('base64');
+}
+function sealedPath(dbFile) {
+  const real = fs.realpathSync(dbFile);
+  return { real, file: path.join(path.dirname(keyFilePath()), `sealed.${crypto.createHash('sha256').update(real).digest('hex')}`) };
+}
+export function sealedRecordExists(dbFile) {
+  if (process.platform === 'win32' || !dbFile) return false;
+  try { fs.lstatSync(sealedPath(dbFile).file); return true; } catch (err) { if (err.code === 'ENOENT') return false; throw insecure(); }
+}
+export function sealedRecordValid(keys, dbFile) {
+  const { real, file } = sealedPath(dbFile);
+  let text;
+  try { text = fs.readFileSync(file, 'utf8').trim(); } catch { return false; }
+  return [keys.current, keys.prev].some(k => k && text === sealedMac(k.key, real));
+}
+export function writeSealedRecord(keys, dbFile) {
+  if (keys.source !== 'file' || process.platform === 'win32') return;
+  const { real, file } = sealedPath(dbFile);
+  try { if (fs.readFileSync(file, 'utf8').trim() === sealedMac(keys.current.key, real)) return; } catch { /* write it */ }
+  const temp = path.join(path.dirname(file), `.sealed.${process.pid}.${crypto.randomBytes(6).toString('hex')}`);
+  try {
+    secureKeyDirectory(path.dirname(file));
+    const fd = fs.openSync(temp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
+    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, sealedMac(keys.current.key, real) + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(temp, file);
+    syncDirectory(path.dirname(file));
+  } catch (err) {
+    try { fs.unlinkSync(temp); } catch { /* none */ }
+    throw err.code === 'STORE_SECURITY' ? err : keyError('KEY_UNAVAILABLE', 'The sealed record could not be written next to the key');
+  }
 }

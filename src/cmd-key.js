@@ -32,7 +32,7 @@ export async function run(args) {
       result = { rotated: 'data' };
     } else {
       rotateKey(openDb());
-      process.stderr.write('lmconn: instance key rotated; the old key is kept as instance.key.prev. This does not help after a leak: run key rotate --data, then cred encrypt-existing --all.\n');
+      process.stderr.write('lmconn: instance key rotated; the old key is kept as instance.key.prev. Older key backups are now STALE: run key backup --to FILE again. Rotating the instance key does not help after a leak: run key rotate --data, then cred encrypt-existing --all.\n');
       result = { rotated: 'instance' };
     }
   } catch (err) {

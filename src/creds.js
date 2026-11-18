@@ -64,9 +64,9 @@ export function closeDb(path = dbPath()) {
 export function setCred(service, field, value, db = openDb()) {
   const stored = writeValue(db, service, field, value);
   db.prepare(
-    'INSERT INTO creds (service, field, value, updated_at, gen) VALUES (?, ?, ?, ?, ?) ' +
-    'ON CONFLICT (service, field) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, gen = excluded.gen',
-  ).run(service, field, stored.value, new Date().toISOString(), stored.gen);
+    'INSERT INTO creds (service, field, value, updated_at) VALUES (?, ?, ?, ?) ' +
+    'ON CONFLICT (service, field) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+  ).run(service, field, stored, new Date().toISOString());
 }
 
 export function getCred(service, field, db = openDb()) {
