@@ -5,6 +5,8 @@ lmscript through `system()` or as a cli.schema.v1 module. Credentials live
 in one SQLite database (`node:sqlite`), like n8n's credential store, minus
 the server. Plain ESM Node >= 22.5, zero npm dependencies.
 
+**Documentation:** [Quick reference](https://www.lmctl.com/tools/lmconn/) · [LLM skill](https://www.lmctl.com/tools/lmconn/skill.html) · [Guide](https://www.lmctl.com/tools/lmconn/guide.html) · [Reference](https://www.lmctl.com/tools/lmconn/reference.html)
+
 ## Install
 
 Prebuilt single-file binaries (Bun-compiled, no Node needed) are attached to
