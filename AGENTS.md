@@ -4,6 +4,10 @@ One CLI, `lmconn`, gives lmscript access to LLM providers and legacy
 services. Plain ESM Node (>= 22.5), zero npm dependencies. The credential
 store uses `node:sqlite`. Tests use `node --test`.
 
+## Durable memory
+
+Read durable-memory/index.md first: one line per decision or incident note in durable-memory/. When you fix a bug or make a decision another agent would need, add a note there and a line to the index in the same commit.
+
 ## Contracts
 
 - stdout carries exactly one JSON envelope per run:
