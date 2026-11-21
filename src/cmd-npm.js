@@ -258,11 +258,14 @@ export function runNpm(args, { cwd, token, timeoutMs = 120000, dir, prefix = dir
 const sha512 = (buf) => 'sha512-' + createHash('sha512').update(buf).digest('base64');
 const cleanup = (dir) => { active.dirs.delete(dir); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } };
 
+// A handle with no token is MISSING_KEY even in broker mode (where an unknown handle has no policy yet), so a caller can tell
+// "log in first" (lmauth publish --login) from a stored credential that is not bound to this registry (CREDENTIAL_POLICY).
 function tokenFor(handle) {
+  if (!getCred(handle, 'api_key') && !getCred(handle, 'oauth_access_token')) {
+    throw Object.assign(new Error(`no token stored for ${handle}`), { code: 'MISSING_KEY' });
+  }
   authorizeOrigin(handle, registry());
-  const token = getCred(handle, 'api_key') || getCred(handle, 'oauth_access_token');
-  if (!token) throw Object.assign(new Error(`no token stored for ${handle}`), { code: 'MISSING_KEY' });
-  return token;
+  return getCred(handle, 'api_key') || getCred(handle, 'oauth_access_token');
 }
 
 const safeText = (text, secrets) => redact(String(text).slice(0, 300), secrets);

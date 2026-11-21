@@ -199,6 +199,12 @@ test('whoami returns only the user name; unknown flags are refused', { skip: ski
   } finally { reg.server.close(); }
 });
 
+test('whoami on a handle with no token is MISSING_KEY in broker mode (lmauth --login starts the web login on it)', { skip: skipNonLinux }, async () => {
+  const r = await lmconn(['npm', 'whoami', '--credential', 'lmauth:never-stored'], { env: { LMCONN_STORE_MODE: 'broker' } });
+  assert.equal(r.code, 1, r.out + r.err);
+  assert.equal(r.json.error.code, 'MISSING_KEY');
+});
+
 test('an ancestor project config cannot steer npm; test overrides are ignored without LMCONN_NPM_TEST', { skip: skipNonLinux }, async () => {
   const reg = await mockRegistry('ok');
   try {
